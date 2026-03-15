@@ -55,26 +55,26 @@ Daemon environment variables:
 ## Testing
 
 ```bash
-go test ./...
-scripts/test-local-btrfs.sh
-scripts/test-local-btrfs.sh --race
+scripts/test/run.sh quick
+scripts/test/run.sh btrfs
+scripts/test/run.sh vm
 ```
 
-The repo also includes lightweight VM helper scripts and notes in
-[`docs/vm-testing.md`](/home/jcav/V-reflink/docs/vm-testing.md) for virtiofs +
-vsock integration work without pulling in a full libvirt stack.
+`quick` is the default contributor path. Use `btrfs` for real local reflink
+validation and `vm` for the full guest/host virtiofs + vsock path. The full
+testing guide lives in [`docs/testing.md`](docs/testing.md).
 
 ## Deployment
 
 Host install helpers:
 
-- [`scripts/install-host.sh`](/home/jcav/V-reflink/scripts/install-host.sh)
-- [`packaging/systemd/vreflinkd.service`](/home/jcav/V-reflink/packaging/systemd/vreflinkd.service)
-- [`packaging/systemd/vreflinkd.env`](/home/jcav/V-reflink/packaging/systemd/vreflinkd.env)
+- [`scripts/install-host.sh`](scripts/install-host.sh)
+- [`packaging/systemd/vreflinkd.service`](packaging/systemd/vreflinkd.service)
+- [`packaging/systemd/vreflinkd.env`](packaging/systemd/vreflinkd.env)
 
 Guest install helper:
 
-- [`scripts/install-guest.sh`](/home/jcav/V-reflink/scripts/install-guest.sh)
+- [`scripts/install-guest.sh`](scripts/install-guest.sh)
 
 ## Failure Modes
 

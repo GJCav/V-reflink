@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 vm_disk="${VREFLINK_VM_DISK:-}"
 vm_disk_format="${VREFLINK_VM_DISK_FORMAT:-}"
@@ -14,6 +14,30 @@ runtime_root="${repo_root}/.tmp/vm-integration/runtime"
 host_port="${VREFLINK_VM_HOST_PORT:-19090}"
 guest_user="${VREFLINK_VM_SSH_USER:-}"
 guest_key="${VREFLINK_VM_SSH_KEY:-}"
+
+usage() {
+  cat <<'EOF'
+usage: scripts/test/vm/run.sh
+
+Run the full virtiofs + vsock VM integration suite. The script will prepare the
+guest image on demand, build the host and guest binaries, boot the guest, and
+verify end-to-end reflink behavior over the shared tree.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    echo "unknown argument: $1" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
 
 daemon_pid=""
 qemu_pid=""
@@ -28,21 +52,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for bin in go ssh scp setsid; do
-  if ! command -v "${bin}" >/dev/null 2>&1; then
-    echo "missing ${bin}" >&2
-    exit 1
-  fi
-done
-
-"${repo_root}/scripts/vm/check-prereqs.sh"
+"${repo_root}/scripts/test/vm/check-prereqs.sh"
 
 mkdir -p "${share_root}/bin" "${share_root}/data" "${build_root}" "${runtime_root}"
 run_root="$(mktemp -d "${runtime_root}/run.XXXXXX")"
 prepared_env="${run_root}/prepared.env"
 
 if [[ -z "${vm_disk}" || -z "${guest_user}" || -z "${guest_key}" ]]; then
-  "${repo_root}/scripts/vm/prepare-ubuntu-minimal.sh" --write-env "${prepared_env}" >/dev/null
+  "${repo_root}/scripts/test/vm/prepare-image.sh" --write-env "${prepared_env}" >/dev/null
   # shellcheck disable=SC1090
   source "${prepared_env}"
   vm_disk="${VREFLINK_VM_DISK}"
@@ -103,7 +120,7 @@ printf 'vm integration reflink payload\n' > "${share_root}/data/A"
   > "${runtime_root}/vreflinkd.log" 2>&1 &
 daemon_pid=$!
 
-setsid "${repo_root}/scripts/vm/run-qemu-vsock-virtiofs.sh" \
+setsid "${repo_root}/scripts/test/vm/boot-qemu.sh" \
   --disk "${overlay_disk}" \
   --disk-format "${vm_disk_format}" \
   --seed-iso "${seed_iso}" \

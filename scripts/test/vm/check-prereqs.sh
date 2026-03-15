@@ -10,7 +10,7 @@ elif [[ -x /usr/lib/qemu/virtiofsd ]]; then
   virtiofsd_bin="/usr/lib/qemu/virtiofsd"
 fi
 
-for bin in qemu-system-x86_64 cloud-localds; do
+for bin in go ssh setsid wget ssh-keygen qemu-system-x86_64 qemu-img cloud-localds; do
   if ! command -v "${bin}" >/dev/null 2>&1; then
     echo "missing ${bin}" >&2
     missing=1

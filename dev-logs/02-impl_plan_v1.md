@@ -36,12 +36,15 @@
 - `gofmt -w $(find cmd internal -name '*.go')`
 - `go mod tidy`
 - `go test ./...`
-- `bash -n scripts/test-local-btrfs.sh scripts/vm/check-prereqs.sh scripts/vm/run-qemu-vsock-virtiofs.sh`
+- `go test -tags btrfstest ./internal/service`
+- `bash -n scripts/test/run.sh scripts/test/vm/check-prereqs.sh scripts/test/vm/boot-qemu.sh scripts/test/vm/prepare-image.sh scripts/test/vm/run.sh`
 - `go test -race ./...`
-- `scripts/vm/run-integration-test.sh`
+- `scripts/test/run.sh quick`
+- `scripts/test/run.sh quick --race`
+- `scripts/test/run.sh btrfs`
+- `scripts/test/run.sh btrfs --race`
+- `scripts/test/run.sh vm`
 - `VREFLINK_VM_RUN=1 go test -tags vmtest ./internal/service`
-- `scripts/test-local-btrfs.sh`
-- `scripts/test-local-btrfs.sh --race`
 
 All Go tests passed.
 
@@ -59,3 +62,10 @@ VM-backed integration status:
 - Verified guest `vreflink` -> host `vreflinkd` over vsock
 - Verified destination content matches source
 - Verified post-write copy-on-write behavior by mutating the destination and confirming the source remained unchanged
+
+## Test Refactor
+
+- Split the service tests into explicit quick, `btrfstest`, and `vmtest` suites.
+- Added `internal/testsupport` to remove duplicated mock reflinker, coded-error assertions, and repo temp helpers.
+- Replaced ad hoc test scripts with the unified `scripts/test/run.sh` entrypoint and moved VM helpers under `scripts/test/vm/`.
+- Consolidated the testing notes into `docs/testing.md`.

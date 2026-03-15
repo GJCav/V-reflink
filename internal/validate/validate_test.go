@@ -1,12 +1,12 @@
 package validate
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/GJCav/V-reflink/internal/protocol"
+	"github.com/GJCav/V-reflink/internal/testsupport"
 )
 
 func TestGuestToRelative(t *testing.T) {
@@ -30,7 +30,7 @@ func TestGuestToRelativeRejectsEscape(t *testing.T) {
 		t.Fatal("GuestToRelative() unexpectedly succeeded")
 	}
 
-	assertCode(t, err, protocol.CodeEPERM)
+	testsupport.AssertCode(t, err, protocol.CodeEPERM)
 }
 
 func TestResolveSourceRejectsSymlink(t *testing.T) {
@@ -50,7 +50,7 @@ func TestResolveSourceRejectsSymlink(t *testing.T) {
 		t.Fatal("ResolveSource() unexpectedly succeeded")
 	}
 
-	assertCode(t, err, protocol.CodeEINVAL)
+	testsupport.AssertCode(t, err, protocol.CodeEINVAL)
 }
 
 func TestRejectHardlink(t *testing.T) {
@@ -77,18 +77,5 @@ func TestRejectHardlink(t *testing.T) {
 		t.Fatal("RejectHardlink() unexpectedly succeeded")
 	}
 
-	assertCode(t, err, protocol.CodeEINVAL)
-}
-
-func assertCode(t *testing.T, err error, want string) {
-	t.Helper()
-
-	var coded *protocol.CodedError
-	if !errors.As(err, &coded) {
-		t.Fatalf("error %T is not a *protocol.CodedError", err)
-	}
-
-	if coded.Code != want {
-		t.Fatalf("coded.Code = %q, want %q", coded.Code, want)
-	}
+	testsupport.AssertCode(t, err, protocol.CodeEINVAL)
 }

@@ -18,7 +18,7 @@ virtiofsd_runner=()
 
 usage() {
   cat <<'EOF'
-usage: run-qemu-vsock-virtiofs.sh --disk DISK --share SHARE --cid CID [options]
+usage: boot-qemu.sh --disk DISK --share SHARE --cid CID [options]
 
 required:
   --disk PATH         qcow2 or raw guest disk image

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 asset_root="${VREFLINK_VM_ASSET_ROOT:-${repo_root}/.tmp/vm-assets/ubuntu-minimal}"
 image_url="${VREFLINK_VM_BASE_IMAGE_URL:-https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img}"
 base_disk="${asset_root}/ubuntu-22.04-minimal-cloudimg-amd64.img"
@@ -10,10 +10,10 @@ env_file=""
 
 usage() {
   cat <<'EOF'
-usage: prepare-ubuntu-minimal.sh [--write-env FILE]
+usage: prepare-image.sh [--write-env FILE]
 
-Downloads a small Ubuntu Minimal cloud image, creates an SSH keypair for the
-VM test flow if needed, and optionally writes an env file for later scripts.
+Download the Ubuntu Minimal cloud image used by the VM suite, create the SSH
+keypair if needed, and optionally write the resolved VM environment to FILE.
 EOF
 }
 

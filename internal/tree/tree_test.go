@@ -1,22 +1,13 @@
 package tree
 
 import (
-	"io/fs"
-	"os"
 	"path/filepath"
 	"testing"
+
+	"os"
+
+	"github.com/GJCav/V-reflink/internal/testsupport"
 )
-
-type copyReflinker struct{}
-
-func (copyReflinker) Reflink(srcPath, dstPath string, mode fs.FileMode) error {
-	data, err := os.ReadFile(srcPath)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(dstPath, data, mode.Perm())
-}
 
 func TestReflinkTreeSuccess(t *testing.T) {
 	t.Parallel()
@@ -32,7 +23,7 @@ func TestReflinkTreeSuccess(t *testing.T) {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	walker := Walker{Reflinker: copyReflinker{}}
+	walker := Walker{Reflinker: testsupport.CopyReflinker{}}
 	if err := walker.ReflinkTree(srcRoot, dstRoot); err != nil {
 		t.Fatalf("ReflinkTree() error = %v", err)
 	}
@@ -64,7 +55,7 @@ func TestReflinkTreeRejectsSymlink(t *testing.T) {
 		t.Fatalf("os.Symlink() error = %v", err)
 	}
 
-	walker := Walker{Reflinker: copyReflinker{}}
+	walker := Walker{Reflinker: testsupport.CopyReflinker{}}
 	if err := walker.ReflinkTree(srcRoot, dstRoot); err == nil {
 		t.Fatal("ReflinkTree() unexpectedly succeeded")
 	}
