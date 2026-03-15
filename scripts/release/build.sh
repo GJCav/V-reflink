@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+invocation_dir="$(pwd)"
 version=""
 arch="amd64"
 out_dir="${repo_root}/dist"
@@ -53,6 +54,11 @@ if [[ "${arch}" != "amd64" ]]; then
   echo "only amd64 is supported in the current release pipeline" >&2
   exit 1
 fi
+
+case "${out_dir}" in
+  /*) ;;
+  *) out_dir="${invocation_dir}/${out_dir}" ;;
+esac
 
 for bin in go dpkg-deb tar sha256sum sed; do
   if ! command -v "${bin}" >/dev/null 2>&1; then

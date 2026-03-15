@@ -3,7 +3,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 version="0.0.0"
-artifact_dir="${repo_root}/.tmp/release-test/out"
+artifact_dir_rel=".tmp/release-test/out"
+artifact_dir="${repo_root}/${artifact_dir_rel}"
 root_dir="${repo_root}/.tmp/release-test/root"
 
 for bin in go dpkg dpkg-deb tar sha256sum; do
@@ -17,7 +18,10 @@ rm -rf "${artifact_dir}" "${root_dir}"
 mkdir -p "${artifact_dir}" "${root_dir}/var/lib/dpkg/updates" "${root_dir}/var/log"
 : > "${root_dir}/var/lib/dpkg/status"
 
-"${repo_root}/scripts/release/build.sh" --version "${version}" --out-dir "${artifact_dir}" >/dev/null
+(
+  cd "${repo_root}"
+  "${repo_root}/scripts/release/build.sh" --version "${version}" --out-dir "${artifact_dir_rel}" >/dev/null
+)
 
 tarball="${artifact_dir}/vreflink_${version}_linux_amd64.tar.gz"
 deb="${artifact_dir}/vreflink_${version}_amd64.deb"
