@@ -1,0 +1,14 @@
+[Unit]
+Description=vreflink host daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/vreflinkd
+ExecStart=/usr/local/bin/vreflinkd --share-root ${VREFLINK_SHARE_ROOT} --port ${VREFLINK_VSOCK_PORT} --read-timeout ${VREFLINK_READ_TIMEOUT} --write-timeout ${VREFLINK_WRITE_TIMEOUT}
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

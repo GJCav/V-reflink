@@ -1,0 +1,18 @@
+.tmp/
+
+# Build outputs
+bin/
+dist/
+
+# Go test and coverage artifacts
+*.out
+*.test
+coverage.out
+.coverage
+
+# Editor and OS noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
