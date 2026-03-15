@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/GJCav/V-reflink/internal/config"
+	pkgassets "github.com/GJCav/V-reflink/packaging"
 )
 
-func TestNewRootCmdWithConfigFlagsOverrideLoadedValues(t *testing.T) {
+func TestResolveRuntimeConfigFlagsOverrideLoadedValues(t *testing.T) {
 	t.Parallel()
 
 	cmd := newRootCmdWithConfig(config.CLI{
@@ -26,16 +30,135 @@ func TestNewRootCmdWithConfigFlagsOverrideLoadedValues(t *testing.T) {
 		t.Fatalf("ParseFlags() error = %v", err)
 	}
 
-	if got, _ := cmd.Flags().GetString("mount-root"); got != "/override" {
-		t.Fatalf("mount-root = %q, want %q", got, "/override")
+	cfg, err := resolveRuntimeConfig(cmd, func() (config.CLI, error) {
+		return config.CLI{
+			GuestMountRoot: "/shared",
+			HostCID:        2,
+			VsockPort:      19090,
+			Timeout:        5 * time.Second,
+		}, nil
+	}, "/override", 7, 20000, 7*time.Second)
+	if err != nil {
+		t.Fatalf("resolveRuntimeConfig() error = %v", err)
 	}
-	if got, _ := cmd.Flags().GetUint32("cid"); got != 7 {
-		t.Fatalf("cid = %d, want %d", got, 7)
+
+	if cfg.GuestMountRoot != "/override" {
+		t.Fatalf("GuestMountRoot = %q, want %q", cfg.GuestMountRoot, "/override")
 	}
-	if got, _ := cmd.Flags().GetUint32("port"); got != 20000 {
-		t.Fatalf("port = %d, want %d", got, 20000)
+	if cfg.HostCID != 7 {
+		t.Fatalf("HostCID = %d, want %d", cfg.HostCID, 7)
 	}
-	if got, _ := cmd.Flags().GetDuration("timeout"); got != 7*time.Second {
-		t.Fatalf("timeout = %s, want %s", got, 7*time.Second)
+	if cfg.VsockPort != 20000 {
+		t.Fatalf("VsockPort = %d, want %d", cfg.VsockPort, 20000)
+	}
+	if cfg.Timeout != 7*time.Second {
+		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, 7*time.Second)
+	}
+}
+
+func TestConfigInitWritesTemplate(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	cmd := newRootCmd()
+	output := &bytes.Buffer{}
+	cmd.SetOut(output)
+	cmd.SetErr(output)
+	cmd.SetArgs([]string{"config", "init"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	path := filepath.Join(configHome, "vreflink", "env")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+
+	if string(got) != string(pkgassets.GuestConfigTemplate()) {
+		t.Fatalf("config template mismatch")
+	}
+}
+
+func TestConfigInitRefusesOverwriteWithoutForce(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	path := filepath.Join(configHome, "vreflink", "env")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(path, []byte("existing"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{"config", "init"})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("Execute() unexpectedly succeeded")
+	}
+}
+
+func TestConfigInitForceOverwritesMalformedConfig(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	path := filepath.Join(configHome, "vreflink", "env")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(path, []byte("not valid"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{"config", "init", "--force"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(got) != string(pkgassets.GuestConfigTemplate()) {
+		t.Fatalf("config template mismatch after --force overwrite")
+	}
+}
+
+func TestInstallCopiesCurrentExecutable(t *testing.T) {
+	t.Parallel()
+
+	executablePath, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+
+	binDir := filepath.Join(t.TempDir(), "bin")
+	cmd := newRootCmd()
+	output := &bytes.Buffer{}
+	cmd.SetOut(output)
+	cmd.SetErr(output)
+	cmd.SetArgs([]string{"install", "--bin-dir", binDir})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	installedPath := filepath.Join(binDir, "vreflink")
+	got, err := os.ReadFile(installedPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	want, err := os.ReadFile(executablePath)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+
+	if !bytes.Equal(got, want) {
+		t.Fatal("installed binary does not match current executable")
 	}
 }

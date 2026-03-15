@@ -24,6 +24,18 @@
 - Added deployment artifacts: host and guest install scripts plus a systemd unit/defaults file for `vreflinkd`.
 - Installed QEMU, OVMF, cloud image tools, and supporting utilities on the host to execute the full VM-backed test path.
 - Added a reusable Ubuntu Minimal image-preparation helper and upgraded the VM runner to support cloud-init seed media, UEFI, common `virtiofsd` install paths, and sudo fallback when `/dev/kvm` or `/dev/vhost-vsock` require it.
+- Added XDG guest config loading plus `vreflink config init` for bootstrapping the guest config file.
+- Replaced the standalone guest/host install shell scripts with binary subcommands:
+  - `vreflink install`
+  - `vreflink config init`
+  - `vreflinkd install`
+  - `vreflinkd systemd-unit`
+- Standardized installed binary paths on `/usr/bin` and updated the systemd unit template accordingly.
+- Added local release packaging for:
+  - a combined `linux-amd64` tarball
+  - a combined local-installable `amd64` `.deb`
+  - release checksums
+- Added GitHub Actions CI/release workflows that call the same local release scripts used for manual builds.
 
 ## Verification Plan
 
@@ -44,6 +56,7 @@
 - `scripts/test/run.sh btrfs`
 - `scripts/test/run.sh btrfs --race`
 - `scripts/test/run.sh vm`
+- `scripts/test/run.sh release`
 - `VREFLINK_VM_RUN=1 go test -tags vmtest ./internal/service`
 
 All Go tests passed.
@@ -69,3 +82,14 @@ VM-backed integration status:
 - Added `internal/testsupport` to remove duplicated mock reflinker, coded-error assertions, and repo temp helpers.
 - Replaced ad hoc test scripts with the unified `scripts/test/run.sh` entrypoint and moved VM helpers under `scripts/test/vm/`.
 - Consolidated the testing notes into `docs/testing.md`.
+
+## Release Packaging
+
+- Added embedded canonical packaging assets so the binaries, release scripts, and `.deb` all share the same guest config and host systemd/defaults templates.
+- Added a local release builder in `scripts/release/build.sh`.
+- Added a release validation stage in `scripts/test/release/run.sh` that:
+  - builds the tarball and `.deb`
+  - checks package metadata and contents with `dpkg-deb`
+  - installs the `.deb` into a temporary package root with `dpkg`
+  - verifies both installed binaries run with `--help`
+  - verifies the service is not enabled by default

@@ -41,6 +41,14 @@ func LoadCLI() (CLI, error) {
 	return loadCLI(os.UserConfigDir, os.LookupEnv)
 }
 
+func DefaultCLI() CLI {
+	return defaultCLIConfig()
+}
+
+func CLIConfigPath() (string, error) {
+	return cliConfigPath(os.UserConfigDir)
+}
+
 func loadCLI(userConfigDir func() (string, error), lookupEnv func(string) (string, bool)) (CLI, error) {
 	cfg := defaultCLIConfig()
 

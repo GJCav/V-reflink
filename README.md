@@ -89,23 +89,58 @@ daemon environment variables below, typically through systemd.
 scripts/test/run.sh quick
 scripts/test/run.sh btrfs
 scripts/test/run.sh vm
+scripts/test/run.sh release
 ```
 
 `quick` is the default contributor path. Use `btrfs` for real local reflink
-validation and `vm` for the full guest/host virtiofs + vsock path. The full
-testing guide lives in [`docs/testing.md`](docs/testing.md).
+validation, `vm` for the full guest/host virtiofs + vsock path, and `release`
+for packaging/install verification. The full testing guide lives in
+[`docs/testing.md`](docs/testing.md).
 
 ## Deployment
 
-Host install helpers:
+Release artifacts:
 
-- [`scripts/install-host.sh`](scripts/install-host.sh)
-- [`packaging/systemd/vreflinkd.service`](packaging/systemd/vreflinkd.service)
-- [`packaging/systemd/vreflinkd.env`](packaging/systemd/vreflinkd.env)
+- GitHub Releases will publish:
+  - `vreflink_<version>_linux_amd64.tar.gz`
+  - `vreflink_<version>_amd64.deb`
+  - `vreflink_<version>_sha256sums.txt`
+- The Debian package is directly installable with `dpkg -i`; no PPA or package
+  registry is required.
 
-Guest install helper:
+Debian/Ubuntu:
 
-- [`scripts/install-guest.sh`](scripts/install-guest.sh)
+```bash
+sudo dpkg -i ./vreflink_<version>_amd64.deb
+```
+
+The package installs:
+
+- `/usr/bin/vreflink`
+- `/usr/bin/vreflinkd`
+- `/lib/systemd/system/vreflinkd.service`
+- `/etc/default/vreflinkd`
+
+The service is installed but disabled by default.
+
+Manual binary install:
+
+```bash
+sudo ./vreflink install
+./vreflink config init
+
+sudo ./vreflinkd install
+./vreflinkd systemd-unit
+```
+
+`vreflink config init` writes the guest config template to
+`$XDG_CONFIG_HOME/vreflink/env` and refuses to overwrite an existing file
+unless `--force` is used.
+
+`vreflinkd systemd-unit` prints the canonical systemd unit to stdout so it can
+be reviewed or customized before installation.
+
+Local artifact build details live in [`docs/releasing.md`](docs/releasing.md).
 
 ## Failure Modes
 

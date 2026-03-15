@@ -16,6 +16,7 @@ coverage, and run `vm` when you need the full guest/host virtiofs + vsock path.
 | `quick` | `scripts/test/run.sh quick` | Fast default Go tests | `go` |
 | `btrfs` | `scripts/test/run.sh btrfs` | Real local reflink + COW checks | workspace on btrfs |
 | `vm` | `scripts/test/run.sh vm` | Full virtiofs + vsock integration | QEMU + VM prerequisites |
+| `release` | `scripts/test/run.sh release` | Tarball + `.deb` build and install smoke tests | `dpkg`, `dpkg-deb`, `tar` |
 | `all` | `scripts/test/run.sh all` | Run `quick`, then `btrfs`, then `vm` | all of the above |
 
 Race detector support:
@@ -39,7 +40,8 @@ scripts/test/run.sh vm
 
 Most changes only need `quick`. Reach for `btrfs` when touching reflink or
 filesystem behavior. Reach for `vm` when touching transport, CLI/daemon wiring,
-or anything that depends on the real guest/host boundary.
+or anything that depends on the real guest/host boundary. Reach for `release`
+when touching installation, packaging, release scripts, or systemd assets.
 
 ## Direct Go Commands
 

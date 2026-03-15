@@ -5,12 +5,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 usage() {
   cat <<'EOF'
-usage: scripts/test/run.sh <quick|btrfs|vm|all> [--race]
+usage: scripts/test/run.sh <quick|btrfs|vm|release|all> [--race]
 
 Suites:
   quick   Run the default fast Go test suite.
   btrfs   Run the local real-reflink integration suite (requires btrfs).
   vm      Run the full virtiofs + vsock VM integration suite.
+  release Run the release tarball/.deb build and smoke tests.
   all     Run quick, then btrfs, then vm.
 
 Options:
@@ -21,6 +22,7 @@ Examples:
   scripts/test/run.sh quick --race
   scripts/test/run.sh btrfs
   scripts/test/run.sh vm
+  scripts/test/run.sh release
 EOF
 }
 
@@ -81,6 +83,17 @@ run_vm() {
   )
 }
 
+run_release() {
+  if [[ "${1}" == "1" ]]; then
+    fail "the release suite does not support --race"
+  fi
+
+  (
+    cd "${repo_root}"
+    "${repo_root}/scripts/test/release/run.sh"
+  )
+}
+
 suite="${1:-help}"
 if [[ $# -gt 0 ]]; then
   shift
@@ -115,9 +128,12 @@ case "${suite}" in
   vm)
     run_vm "${race}"
     ;;
+  release)
+    run_release "${race}"
+    ;;
   all)
     if [[ "${race}" == "1" ]]; then
-      fail "the all suite does not support --race because the vm suite does not run with race; run quick --race and btrfs --race separately"
+      fail "the all suite does not support --race because the vm and release suites do not run with race; run quick --race and btrfs --race separately"
     fi
     run_quick 0
     run_btrfs 0
