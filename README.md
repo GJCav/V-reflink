@@ -26,6 +26,15 @@ vreflinkd --share-root /srv/labshare --port 19090
 Guest:
 
 ```bash
+vreflink /shared/A /shared/B
+vreflink -r /shared/dirA /shared/dirB
+```
+
+`vreflink` can auto-load its common guest-side settings from
+`$XDG_CONFIG_HOME/vreflink/env`, which is typically `~/.config/vreflink/env`.
+Without that file, you can still use explicit flags:
+
+```bash
 vreflink --mount-root /shared --cid 2 --port 19090 /shared/A /shared/B
 vreflink -r --mount-root /shared --cid 2 --port 19090 /shared/dirA /shared/dirB
 ```
@@ -38,14 +47,36 @@ go build ./...
 
 ## Configuration
 
-CLI environment variables:
+`vreflink` CLI settings can come from built-in defaults, the XDG config file,
+environment variables, or explicit flags. Precedence is:
+
+```text
+flags > environment > $XDG_CONFIG_HOME/vreflink/env > defaults
+```
+
+Example guest config file:
+
+```bash
+# ~/.config/vreflink/env
+VREFLINK_GUEST_MOUNT_ROOT=/shared
+VREFLINK_HOST_CID=2
+VREFLINK_VSOCK_PORT=19090
+```
+
+CLI keys:
 
 - `VREFLINK_GUEST_MOUNT_ROOT` default: `/shared`
 - `VREFLINK_HOST_CID` default: `2`
 - `VREFLINK_VSOCK_PORT` default: `19090`
 - `VREFLINK_CLIENT_TIMEOUT` default: `5s`
 
+If the XDG config file exists but is malformed, `vreflink` exits with a clear
+startup error.
+
 Daemon environment variables:
+
+`vreflinkd` does not auto-load the XDG guest config file. It still uses the
+daemon environment variables below, typically through systemd.
 
 - `VREFLINK_SHARE_ROOT` default: `/srv/labshare`
 - `VREFLINK_VSOCK_PORT` default: `19090`

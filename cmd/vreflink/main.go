@@ -14,14 +14,28 @@ import (
 )
 
 func main() {
-	if err := newRootCmd().Execute(); err != nil {
+	cmd, err := newRootCmd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vreflink: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "vreflink: %s\n", err)
 		os.Exit(1)
 	}
 }
 
-func newRootCmd() *cobra.Command {
-	cfg := config.LoadCLI()
+func newRootCmd() (*cobra.Command, error) {
+	cfg, err := config.LoadCLI()
+	if err != nil {
+		return nil, fmt.Errorf("load CLI config: %w", err)
+	}
+
+	return newRootCmdWithConfig(cfg), nil
+}
+
+func newRootCmdWithConfig(cfg config.CLI) *cobra.Command {
 	var recursive bool
 
 	cmd := &cobra.Command{
