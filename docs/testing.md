@@ -76,6 +76,7 @@ scripts/test/vm/check-prereqs.sh
 The VM suite expects:
 
 - `go`
+- `mkfs.btrfs` unless `VREFLINK_VM_SHARE_ROOT` points to your own reflink-capable export
 - `ssh`
 - `setsid`
 - `wget`
@@ -88,8 +89,9 @@ The VM suite expects:
 - `/dev/vhost-vsock`
 
 The VM runner will prepare the Ubuntu Minimal image on demand, build the test
-binaries, boot the guest, mount virtiofs, run `vreflink`, and verify
-post-write copy-on-write behavior.
+binaries, create a temporary loopback btrfs share root unless
+`VREFLINK_VM_SHARE_ROOT` is already set, boot the guest, mount virtiofs, run
+`vreflink`, and verify post-write copy-on-write behavior.
 
 ## VM Environment Variables
 
@@ -113,11 +115,12 @@ set, the VM suite will populate them automatically by calling
 
 ## Proxy Use
 
-If image downloads or package fetches need the provided proxy:
+If your environment needs a proxy for image downloads or package fetches, set
+the standard proxy variables before running the scripts:
 
 ```bash
-export HTTP_PROXY=http://192.168.55.1:7890
-export HTTPS_PROXY=http://192.168.55.1:7890
+export HTTP_PROXY=http://your-proxy:port
+export HTTPS_PROXY=http://your-proxy:port
 ```
 
 The VM helper scripts inherit those environment variables automatically.

@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/GJCav/V-reflink/internal/config"
+	"github.com/GJCav/V-reflink/internal/protocol"
 	pkgassets "github.com/GJCav/V-reflink/packaging"
 )
 
@@ -160,5 +162,38 @@ func TestInstallCopiesCurrentExecutable(t *testing.T) {
 
 	if !bytes.Equal(got, want) {
 		t.Fatal("installed binary does not match current executable")
+	}
+}
+
+func TestCommandResolvesRelativePathsFromWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.CLI{
+		GuestMountRoot: "/shared",
+		HostCID:        2,
+		VsockPort:      19090,
+		Timeout:        5 * time.Second,
+	}
+
+	var gotReq protocol.Request
+	cmd := newRootCmdWithDependencies(
+		func() (config.CLI, error) { return cfg, nil },
+		func() (string, error) { return "/shared/project", nil },
+		func(_ context.Context, _ config.CLI, req protocol.Request) (*protocol.Response, error) {
+			gotReq = req
+			return &protocol.Response{OK: true}, nil
+		},
+	)
+	cmd.SetArgs([]string{"src.txt", "nested/dst.txt"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if gotReq.Src != "project/src.txt" {
+		t.Fatalf("Src = %q, want %q", gotReq.Src, "project/src.txt")
+	}
+	if gotReq.Dst != "project/nested/dst.txt" {
+		t.Fatalf("Dst = %q, want %q", gotReq.Dst, "project/nested/dst.txt")
 	}
 }

@@ -17,6 +17,11 @@ for bin in go ssh setsid wget ssh-keygen qemu-system-x86_64 qemu-img cloud-local
   fi
 done
 
+if [[ -z "${VREFLINK_VM_SHARE_ROOT:-}" ]] && ! command -v mkfs.btrfs >/dev/null 2>&1; then
+  echo "missing mkfs.btrfs (install btrfs-progs or set VREFLINK_VM_SHARE_ROOT to an existing reflink-capable export)" >&2
+  missing=1
+fi
+
 if [[ -z "${virtiofsd_bin}" ]]; then
   echo "missing virtiofsd (expected in PATH or /usr/lib/qemu/virtiofsd)" >&2
   missing=1

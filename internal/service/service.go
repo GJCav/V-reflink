@@ -2,8 +2,10 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/KarpelesLab/reflink"
 	"golang.org/x/sys/unix"
@@ -29,6 +31,86 @@ func New(root string) *Service {
 		Root:      root,
 		Reflinker: FileReflinker{},
 	}
+}
+
+func ValidateShareRoot(root string, reflinker Reflinker) error {
+	rootPath, err := normalizeShareRoot(root)
+	if err != nil {
+		return err
+	}
+
+	info, err := os.Stat(rootPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("share root %q does not exist", rootPath)
+		}
+
+		return fmt.Errorf("stat share root %q: %w", rootPath, err)
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("share root %q must be a directory", rootPath)
+	}
+
+	if reflinker == nil {
+		reflinker = FileReflinker{}
+	}
+
+	var srcFile *os.File
+	srcFile, err = os.CreateTemp(rootPath, ".vreflinkd-startup-probe-src-*")
+	if err != nil {
+		return fmt.Errorf("share root %q is not writable: %w", rootPath, err)
+	}
+
+	srcPath := srcFile.Name()
+	var dstPath string
+	defer func() {
+		if srcFile != nil {
+			_ = srcFile.Close()
+		}
+		_ = os.Remove(srcPath)
+		if dstPath != "" {
+			_ = os.Remove(dstPath)
+		}
+	}()
+
+	if _, err := srcFile.Write([]byte("probe")); err != nil {
+		return fmt.Errorf("prepare share root probe in %q: %w", rootPath, err)
+	}
+
+	if err := srcFile.Close(); err != nil {
+		return fmt.Errorf("prepare share root probe in %q: %w", rootPath, err)
+	}
+	srcFile = nil
+
+	dstFile, err := os.CreateTemp(rootPath, ".vreflinkd-startup-probe-dst-*")
+	if err != nil {
+		return fmt.Errorf("share root %q is not writable: %w", rootPath, err)
+	}
+
+	dstPath = dstFile.Name()
+	if err := dstFile.Close(); err != nil {
+		return fmt.Errorf("prepare share root probe in %q: %w", rootPath, err)
+	}
+
+	if err := os.Remove(dstPath); err != nil {
+		return fmt.Errorf("prepare share root probe in %q: %w", rootPath, err)
+	}
+
+	if err := reflinker.Reflink(srcPath, dstPath, 0o600); err != nil {
+		if coded, ok := protocol.AsCoded(err); ok && coded.Code == protocol.CodeEOPNOTSUPP {
+			return fmt.Errorf("share root %q does not support reflink: %w", rootPath, err)
+		}
+
+		switch protocol.CodeFromError(err) {
+		case protocol.CodeEOPNOTSUPP:
+			return fmt.Errorf("share root %q does not support reflink: %w", rootPath, err)
+		default:
+			return fmt.Errorf("share root %q failed reflink probe: %w", rootPath, err)
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) Execute(req protocol.Request) error {
@@ -135,4 +217,17 @@ func mapReflinkError(err error) error {
 	default:
 		return err
 	}
+}
+
+func normalizeShareRoot(root string) (string, error) {
+	if root == "" {
+		return "", fmt.Errorf("share root is required")
+	}
+
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve share root: %w", err)
+	}
+
+	return filepath.Clean(absRoot), nil
 }

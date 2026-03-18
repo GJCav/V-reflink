@@ -107,6 +107,8 @@ Guest:
 ```bash
 vreflink /shared/A /shared/B
 vreflink -r /shared/dirA /shared/dirB
+cd /shared/project
+vreflink data/A data/B
 ```
 
 `vreflink` can auto-load its common guest-side settings from
@@ -117,6 +119,10 @@ Without that file, you can still use explicit flags:
 vreflink --mount-root /shared --cid 2 --port 19090 /shared/A /shared/B
 vreflink -r --mount-root /shared --cid 2 --port 19090 /shared/dirA /shared/dirB
 ```
+
+Relative `SRC` and `DST` arguments are resolved from the current working
+directory, but the resolved paths must still stay within the configured guest
+mount root.
 
 ## Build
 
@@ -161,6 +167,10 @@ daemon environment variables below, typically through systemd.
 - `VREFLINK_VSOCK_PORT` default: `19090`
 - `VREFLINK_READ_TIMEOUT` default: `5s`
 - `VREFLINK_WRITE_TIMEOUT` default: `5s`
+
+`vreflinkd` validates `VREFLINK_SHARE_ROOT` before it starts listening. Startup
+fails if the path does not exist, is not a directory, is not writable for the
+probe files, or cannot complete a reflink probe.
 
 ## Testing
 
@@ -227,6 +237,8 @@ Local artifact build details live in [`docs/releasing.md`](docs/releasing.md).
 - Symlinks, hardlinks, device nodes, FIFOs, and sockets are rejected.
 - Recursive mode is fail-fast and non-transactional, so a partial destination
   tree may remain after the first error.
+- The daemon refuses startup if the configured share root is not a usable
+  reflink-capable directory.
 - There is no fallback copy path. If the host filesystem does not support
   reflinks for the requested source and destination, the request fails with
   `EOPNOTSUPP`.

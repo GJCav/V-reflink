@@ -38,6 +38,11 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			logger := logutil.NewLogger(logutil.ParseLevel(logLevel))
+
+			if err := service.ValidateShareRoot(cfg.ShareRoot, service.FileReflinker{}); err != nil {
+				return err
+			}
+
 			svc := service.New(cfg.ShareRoot)
 
 			listener, err := vsock.Listen(cfg.VsockPort, nil)

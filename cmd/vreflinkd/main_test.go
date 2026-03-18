@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	pkgassets "github.com/GJCav/V-reflink/packaging"
@@ -82,5 +83,23 @@ func TestInstallCopiesExecutableAndTemplates(t *testing.T) {
 	}
 	if string(gotDefaults) != string(pkgassets.DaemonDefaultsTemplate()) {
 		t.Fatal("installed defaults file does not match canonical template")
+	}
+}
+
+func TestRootCommandRejectsInvalidShareRootBeforeListen(t *testing.T) {
+	t.Parallel()
+
+	missingRoot := filepath.Join(t.TempDir(), "missing")
+
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{"--share-root", missingRoot})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("Execute() error = %v, want missing-root validation", err)
 	}
 }

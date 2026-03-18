@@ -33,6 +33,60 @@ func TestGuestToRelativeRejectsEscape(t *testing.T) {
 	testsupport.AssertCode(t, err, protocol.CodeEPERM)
 }
 
+func TestResolveGuestArgument(t *testing.T) {
+	t.Parallel()
+
+	t.Run("absolute path", func(t *testing.T) {
+		got, err := ResolveGuestArgument("/shared", "/shared/project", "/shared/data/file.bin")
+		if err != nil {
+			t.Fatalf("ResolveGuestArgument() error = %v", err)
+		}
+
+		if got != "data/file.bin" {
+			t.Fatalf("ResolveGuestArgument() = %q, want %q", got, "data/file.bin")
+		}
+	})
+
+	t.Run("relative path from working directory", func(t *testing.T) {
+		got, err := ResolveGuestArgument("/shared", "/shared/project", "nested/file.bin")
+		if err != nil {
+			t.Fatalf("ResolveGuestArgument() error = %v", err)
+		}
+
+		if got != "project/nested/file.bin" {
+			t.Fatalf("ResolveGuestArgument() = %q, want %q", got, "project/nested/file.bin")
+		}
+	})
+
+	t.Run("mixed absolute and relative paths", func(t *testing.T) {
+		src, err := ResolveGuestArgument("/shared", "/shared/project", "/shared/input/src.bin")
+		if err != nil {
+			t.Fatalf("ResolveGuestArgument() error = %v", err)
+		}
+
+		dst, err := ResolveGuestArgument("/shared", "/shared/project", "output/dst.bin")
+		if err != nil {
+			t.Fatalf("ResolveGuestArgument() error = %v", err)
+		}
+
+		if src != "input/src.bin" {
+			t.Fatalf("src = %q, want %q", src, "input/src.bin")
+		}
+		if dst != "project/output/dst.bin" {
+			t.Fatalf("dst = %q, want %q", dst, "project/output/dst.bin")
+		}
+	})
+
+	t.Run("relative escape", func(t *testing.T) {
+		_, err := ResolveGuestArgument("/shared", "/shared/project", "../../../outside.bin")
+		if err == nil {
+			t.Fatal("ResolveGuestArgument() unexpectedly succeeded")
+		}
+
+		testsupport.AssertCode(t, err, protocol.CodeEPERM)
+	})
+}
+
 func TestResolveSourceRejectsSymlink(t *testing.T) {
 	t.Parallel()
 

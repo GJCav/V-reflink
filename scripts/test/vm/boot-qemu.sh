@@ -142,7 +142,11 @@ fi
 
 if [[ "${firmware}" == "uefi" ]]; then
   if [[ -z "${ovmf_code}" ]]; then
-    for candidate in /usr/share/OVMF/OVMF_CODE.fd /usr/share/ovmf/OVMF.fd; do
+    for candidate in \
+      /usr/share/OVMF/OVMF_CODE.fd \
+      /usr/share/OVMF/OVMF_CODE_4M.fd \
+      /usr/share/OVMF/OVMF_CODE_4M.ms.fd \
+      /usr/share/ovmf/OVMF.fd; do
       if [[ -f "${candidate}" ]]; then
         ovmf_code="${candidate}"
         break
@@ -151,7 +155,20 @@ if [[ "${firmware}" == "uefi" ]]; then
   fi
 
   if [[ -z "${ovmf_vars}" ]]; then
-    for candidate in /usr/share/OVMF/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS.ms.fd; do
+    vars_candidates=()
+    case "$(basename "${ovmf_code}")" in
+      OVMF_CODE_4M.fd)
+        vars_candidates=(/usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS_4M.ms.fd /usr/share/OVMF/OVMF_VARS.ms.fd)
+        ;;
+      OVMF_CODE_4M.ms.fd|OVMF_CODE_4M.secboot.fd|OVMF_CODE_4M.snakeoil.fd)
+        vars_candidates=(/usr/share/OVMF/OVMF_VARS_4M.ms.fd /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.ms.fd /usr/share/OVMF/OVMF_VARS.fd)
+        ;;
+      *)
+        vars_candidates=(/usr/share/OVMF/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS.ms.fd /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS_4M.ms.fd)
+        ;;
+    esac
+
+    for candidate in "${vars_candidates[@]}"; do
       if [[ -f "${candidate}" ]]; then
         ovmf_vars="${runtime_dir}/OVMF_VARS.fd"
         cp "${candidate}" "${ovmf_vars}"

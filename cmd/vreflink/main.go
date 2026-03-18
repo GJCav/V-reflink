@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -16,6 +17,8 @@ import (
 	pkgassets "github.com/GJCav/V-reflink/packaging"
 )
 
+type requestFunc func(context.Context, config.CLI, protocol.Request) (*protocol.Response, error)
+
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "vreflink: %s\n", err)
@@ -24,16 +27,24 @@ func main() {
 }
 
 func newRootCmd() *cobra.Command {
-	return newRootCmdWithLoader(config.LoadCLI)
+	return newRootCmdWithDependencies(config.LoadCLI, os.Getwd, executeRequest)
 }
 
 func newRootCmdWithConfig(cfg config.CLI) *cobra.Command {
-	return newRootCmdWithLoader(func() (config.CLI, error) {
+	return newRootCmdWithDependencies(func() (config.CLI, error) {
 		return cfg, nil
-	})
+	}, os.Getwd, executeRequest)
 }
 
 func newRootCmdWithLoader(loadConfig func() (config.CLI, error)) *cobra.Command {
+	return newRootCmdWithDependencies(loadConfig, os.Getwd, executeRequest)
+}
+
+func newRootCmdWithDependencies(
+	loadConfig func() (config.CLI, error),
+	getwd func() (string, error),
+	doRequest requestFunc,
+) *cobra.Command {
 	defaults := config.DefaultCLI()
 
 	var recursive bool
@@ -54,26 +65,17 @@ func newRootCmdWithLoader(loadConfig func() (config.CLI, error)) *cobra.Command 
 				return err
 			}
 
-			srcRel, err := validate.GuestToRelative(cfg.GuestMountRoot, args[0])
+			cwd, err := getwd()
+			if err != nil {
+				return fmt.Errorf("resolve working directory: %w", err)
+			}
+
+			req, err := buildRequest(cfg, cwd, args[0], args[1], recursive)
 			if err != nil {
 				return err
 			}
 
-			dstRel, err := validate.GuestToRelative(cfg.GuestMountRoot, args[1])
-			if err != nil {
-				return err
-			}
-
-			req := protocol.Request{
-				Version:   protocol.Version1,
-				Op:        protocol.OpReflink,
-				Recursive: recursive,
-				Src:       srcRel,
-				Dst:       dstRel,
-			}
-
-			cli := client.New(cfg.HostCID, cfg.VsockPort, cfg.Timeout)
-			resp, err := cli.Do(cmd.Context(), req)
+			resp, err := doRequest(cmd.Context(), cfg, req)
 			if err != nil {
 				return err
 			}
@@ -103,6 +105,31 @@ func newRootCmdWithLoader(loadConfig func() (config.CLI, error)) *cobra.Command 
 	cmd.AddCommand(newConfigCmd())
 
 	return cmd
+}
+
+func buildRequest(cfg config.CLI, cwd, srcArg, dstArg string, recursive bool) (protocol.Request, error) {
+	srcRel, err := validate.ResolveGuestArgument(cfg.GuestMountRoot, cwd, srcArg)
+	if err != nil {
+		return protocol.Request{}, err
+	}
+
+	dstRel, err := validate.ResolveGuestArgument(cfg.GuestMountRoot, cwd, dstArg)
+	if err != nil {
+		return protocol.Request{}, err
+	}
+
+	return protocol.Request{
+		Version:   protocol.Version1,
+		Op:        protocol.OpReflink,
+		Recursive: recursive,
+		Src:       srcRel,
+		Dst:       dstRel,
+	}, nil
+}
+
+func executeRequest(ctx context.Context, cfg config.CLI, req protocol.Request) (*protocol.Response, error) {
+	cli := client.New(cfg.HostCID, cfg.VsockPort, cfg.Timeout)
+	return cli.Do(ctx, req)
 }
 
 func resolveRuntimeConfig(cmd *cobra.Command, loadConfig func() (config.CLI, error), mountRoot string, hostCID, port uint32, timeout time.Duration) (config.CLI, error) {

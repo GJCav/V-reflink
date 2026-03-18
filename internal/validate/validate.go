@@ -53,6 +53,19 @@ func GuestToRelative(mountRoot, guestPath string) (string, error) {
 	return normalized, nil
 }
 
+func ResolveGuestArgument(mountRoot, cwd, arg string) (string, error) {
+	if arg == "" {
+		return "", protocol.NewError(protocol.CodeEINVAL, "path is required")
+	}
+
+	guestPath := arg
+	if !filepath.IsAbs(guestPath) {
+		guestPath = filepath.Join(cwd, guestPath)
+	}
+
+	return GuestToRelative(mountRoot, guestPath)
+}
+
 func NormalizeRelative(path string) (string, error) {
 	if path == "" {
 		return "", protocol.NewError(protocol.CodeEINVAL, "path is required")
