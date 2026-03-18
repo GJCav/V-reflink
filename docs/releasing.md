@@ -3,7 +3,7 @@
 Local release artifacts are built from:
 
 ```bash
-scripts/release/build.sh --version 0.1.0 --out-dir ./dist
+go run ./cmd/vreflink-dev release build --version 0.1.0 --out-dir ./dist
 ```
 
 That script produces:
@@ -38,7 +38,7 @@ other Linux distributions can copy the files into place manually.
 Run the packaging/release verification stage with:
 
 ```bash
-scripts/test/run.sh release
+go run ./cmd/vreflink-dev test release
 ```
 
 This stage builds the artifacts, inspects the `.deb` contents, installs it into

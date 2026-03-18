@@ -1,8 +1,10 @@
-//go:build btrfstest
+//go:build reflinkfstest
 
 package service
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,9 +14,26 @@ import (
 	"github.com/GJCav/V-reflink/internal/testsupport"
 )
 
-func TestExecuteRealReflinkOnBtrfs(t *testing.T) {
-	root := testsupport.RepoTempDir(t, "service-btrfs-tests")
-	testsupport.RequireBtrfs(t, root)
+var reflinkSuiteRoot string
+
+func TestMain(m *testing.M) {
+	if err := testsupport.RequirePrivilegedSuiteAccess(context.Background(), "reflinkfs", "go run ./cmd/vreflink-dev test reflinkfs"); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	root, err := testsupport.ResolvePreparedReflinkTestRoot()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	reflinkSuiteRoot = root
+
+	os.Exit(m.Run())
+}
+
+func TestExecuteRealReflinkOnReflinkFS(t *testing.T) {
+	root := testsupport.TempDirUnder(t, reflinkSuiteRoot)
 
 	shareRoot := filepath.Join(root, "share")
 	if err := os.MkdirAll(shareRoot, 0o755); err != nil {
@@ -72,8 +91,7 @@ func TestExecuteRealReflinkOnBtrfs(t *testing.T) {
 }
 
 func TestExecuteConcurrentSameDestination(t *testing.T) {
-	root := testsupport.RepoTempDir(t, "service-btrfs-tests")
-	testsupport.RequireBtrfs(t, root)
+	root := testsupport.TempDirUnder(t, reflinkSuiteRoot)
 
 	shareRoot := filepath.Join(root, "share")
 	if err := os.MkdirAll(shareRoot, 0o755); err != nil {
@@ -116,7 +134,7 @@ func TestExecuteConcurrentSameDestination(t *testing.T) {
 		switch {
 		case err == nil:
 			successes++
-		case testsupport.CodeOf(err) == protocol.CodeEEXIST:
+		case testsupport.CodeOf(err) == protocol.CodeEEXIST, protocol.CodeFromError(err) == protocol.CodeEEXIST:
 			eexist++
 		default:
 			t.Fatalf("unexpected concurrent result: %v", err)

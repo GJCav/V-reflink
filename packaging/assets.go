@@ -6,6 +6,9 @@ var (
 	//go:embed config/vreflink.env
 	guestConfigTemplate string
 
+	//go:embed deb/control.template
+	debControlTemplate string
+
 	//go:embed systemd/vreflinkd.service
 	systemdUnitTemplate string
 
@@ -15,6 +18,10 @@ var (
 
 func GuestConfigTemplate() []byte {
 	return []byte(guestConfigTemplate)
+}
+
+func DebControlTemplate() []byte {
+	return []byte(debControlTemplate)
 }
 
 func SystemdUnitTemplate() []byte {

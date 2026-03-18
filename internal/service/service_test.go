@@ -1,4 +1,4 @@
-//go:build !btrfstest && !vmtest
+//go:build !reflinkfstest && !vmtest
 
 package service
 

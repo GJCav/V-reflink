@@ -1,7 +1,7 @@
 # vreflink
 
 `vreflink` is a guest-side CLI and `vreflinkd` is a host-side daemon for
-requesting true host-side btrfs reflinks over a virtiofs share.
+requesting true host-side reflinks over a virtiofs share.
 
 The data plane is the shared virtiofs mount. The control plane is a single
 request/response RPC over AF_VSOCK stream sockets.
@@ -57,7 +57,7 @@ More background:
 +---------------------------------------------------------------+
 | Host                                                          |
 |                                                               |
-|   backing filesystem: btrfs                                   |
+|   backing filesystem: reflink-capable fs                      |
 |   share root: /srv/labshare                                   |
 |                                                               |
 |   +-------------------+          +-------------------------+  |
@@ -205,15 +205,18 @@ attestation scheme inside the guest.
 ## Testing
 
 ```bash
-scripts/test/run.sh quick
-scripts/test/run.sh btrfs
-scripts/test/run.sh vm
-scripts/test/run.sh release
+go run ./cmd/vreflink-dev test quick
+go run ./cmd/vreflink-dev test reflinkfs
+go run ./cmd/vreflink-dev test vm
+go run ./cmd/vreflink-dev test release
 ```
 
-`quick` is the default contributor path. Use `btrfs` for real local reflink
-validation, `vm` for the full guest/host virtiofs + vsock path, and `release`
-for packaging/install verification. The full testing guide lives in
+`quick` is the default contributor path. Use `reflinkfs` for real local
+reflink validation and `vm` for the full guest/host virtiofs + vsock path.
+Both privileged suites are intended to be run through the contributor runner,
+which provisions and tears down their temporary reflink-capable scratch roots
+and requires root or non-interactive `sudo`. Use `release` for
+packaging/install verification. The full testing guide lives in
 [`docs/testing.md`](docs/testing.md).
 
 ## Deployment
