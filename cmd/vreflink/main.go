@@ -52,6 +52,7 @@ func newRootCmdWithDependencies(
 	hostCID := defaults.HostCID
 	port := defaults.VsockPort
 	timeout := defaults.Timeout
+	authToken := defaults.AuthToken
 
 	cmd := &cobra.Command{
 		Use:           "vreflink [-r] SRC DST",
@@ -60,7 +61,7 @@ func newRootCmdWithDependencies(
 		SilenceUsage:  true,
 		Args:          cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := resolveRuntimeConfig(cmd, loadConfig, mountRoot, hostCID, port, timeout)
+			cfg, err := resolveRuntimeConfig(cmd, loadConfig, mountRoot, hostCID, port, timeout, authToken)
 			if err != nil {
 				return err
 			}
@@ -100,6 +101,7 @@ func newRootCmdWithDependencies(
 	cmd.Flags().Uint32Var(&hostCID, "cid", hostCID, "host vsock CID")
 	cmd.Flags().Uint32Var(&port, "port", port, "vsock port")
 	cmd.Flags().DurationVar(&timeout, "timeout", timeout, "request timeout")
+	cmd.Flags().StringVar(&authToken, "token", authToken, "authentication token for protocol v2 requests")
 
 	cmd.AddCommand(newInstallCmd())
 	cmd.AddCommand(newConfigCmd())
@@ -118,12 +120,18 @@ func buildRequest(cfg config.CLI, cwd, srcArg, dstArg string, recursive bool) (p
 		return protocol.Request{}, err
 	}
 
+	version := protocol.Version1
+	if cfg.AuthToken != "" {
+		version = protocol.Version2
+	}
+
 	return protocol.Request{
-		Version:   protocol.Version1,
+		Version:   version,
 		Op:        protocol.OpReflink,
 		Recursive: recursive,
 		Src:       srcRel,
 		Dst:       dstRel,
+		Token:     cfg.AuthToken,
 	}, nil
 }
 
@@ -132,7 +140,7 @@ func executeRequest(ctx context.Context, cfg config.CLI, req protocol.Request) (
 	return cli.Do(ctx, req)
 }
 
-func resolveRuntimeConfig(cmd *cobra.Command, loadConfig func() (config.CLI, error), mountRoot string, hostCID, port uint32, timeout time.Duration) (config.CLI, error) {
+func resolveRuntimeConfig(cmd *cobra.Command, loadConfig func() (config.CLI, error), mountRoot string, hostCID, port uint32, timeout time.Duration, authToken string) (config.CLI, error) {
 	cfg, err := loadConfig()
 	if err != nil {
 		return config.CLI{}, fmt.Errorf("load CLI config: %w", err)
@@ -149,6 +157,9 @@ func resolveRuntimeConfig(cmd *cobra.Command, loadConfig func() (config.CLI, err
 	}
 	if cmd.Flags().Changed("timeout") {
 		cfg.Timeout = timeout
+	}
+	if cmd.Flags().Changed("token") {
+		cfg.AuthToken = authToken
 	}
 
 	return cfg, nil

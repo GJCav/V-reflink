@@ -15,6 +15,7 @@ import (
 const (
 	defaultMountRoot = "/shared"
 	defaultShareRoot = "/srv/labshare"
+	defaultTokenMap  = "/etc/vreflinkd/tokens.yaml"
 	defaultHostCID   = 2
 	defaultPort      = 19090
 	defaultTimeout   = 5 * time.Second
@@ -28,13 +29,16 @@ type CLI struct {
 	HostCID        uint32
 	VsockPort      uint32
 	Timeout        time.Duration
+	AuthToken      string
 }
 
 type Daemon struct {
-	ShareRoot    string
-	VsockPort    uint32
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	ShareRoot       string
+	VsockPort       uint32
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	TokenMapPath    string
+	AllowV1Fallback bool
 }
 
 func LoadCLI() (CLI, error) {
@@ -67,6 +71,7 @@ func loadCLI(userConfigDir func() (string, error), lookupEnv func(string) (strin
 	cfg.HostCID = uint32LookupEnv(lookupEnv, "VREFLINK_HOST_CID", cfg.HostCID)
 	cfg.VsockPort = uint32LookupEnv(lookupEnv, "VREFLINK_VSOCK_PORT", cfg.VsockPort)
 	cfg.Timeout = durationLookupEnv(lookupEnv, "VREFLINK_CLIENT_TIMEOUT", cfg.Timeout)
+	cfg.AuthToken = stringLookupEnv(lookupEnv, "VREFLINK_AUTH_TOKEN", cfg.AuthToken)
 
 	return cfg, nil
 }
@@ -77,15 +82,18 @@ func defaultCLIConfig() CLI {
 		HostCID:        defaultHostCID,
 		VsockPort:      defaultPort,
 		Timeout:        defaultTimeout,
+		AuthToken:      "",
 	}
 }
 
 func LoadDaemon() Daemon {
 	return Daemon{
-		ShareRoot:    stringEnv("VREFLINK_SHARE_ROOT", defaultShareRoot),
-		VsockPort:    uint32Env("VREFLINK_VSOCK_PORT", defaultPort),
-		ReadTimeout:  durationEnv("VREFLINK_READ_TIMEOUT", defaultTimeout),
-		WriteTimeout: durationEnv("VREFLINK_WRITE_TIMEOUT", defaultTimeout),
+		ShareRoot:       stringEnv("VREFLINK_SHARE_ROOT", defaultShareRoot),
+		VsockPort:       uint32Env("VREFLINK_VSOCK_PORT", defaultPort),
+		ReadTimeout:     durationEnv("VREFLINK_READ_TIMEOUT", defaultTimeout),
+		WriteTimeout:    durationEnv("VREFLINK_WRITE_TIMEOUT", defaultTimeout),
+		TokenMapPath:    stringEnv("VREFLINK_TOKEN_MAP_PATH", defaultTokenMap),
+		AllowV1Fallback: boolEnv("VREFLINK_ALLOW_V1_FALLBACK", false),
 	}
 }
 
@@ -176,6 +184,8 @@ func applyCLIFileEntry(cfg *CLI, key, value string) error {
 			return fmt.Errorf("%s must be a duration: %w", key, err)
 		}
 		cfg.Timeout = parsed
+	case "VREFLINK_AUTH_TOKEN":
+		cfg.AuthToken = value
 	}
 
 	return nil
@@ -191,6 +201,10 @@ func uint32Env(key string, fallback uint32) uint32 {
 
 func durationEnv(key string, fallback time.Duration) time.Duration {
 	return durationLookupEnv(os.LookupEnv, key, fallback)
+}
+
+func boolEnv(key string, fallback bool) bool {
+	return boolLookupEnv(os.LookupEnv, key, fallback)
 }
 
 func stringLookupEnv(lookupEnv func(string) (string, bool), key, fallback string) string {
@@ -223,6 +237,20 @@ func durationLookupEnv(lookupEnv func(string) (string, bool), key string, fallba
 	}
 
 	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
+}
+
+func boolLookupEnv(lookupEnv func(string) (string, bool), key string, fallback bool) bool {
+	value, ok := lookupEnv(key)
+	if !ok || value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}

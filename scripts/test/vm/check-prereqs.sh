@@ -37,6 +37,20 @@ if [[ ! -e /dev/vhost-vsock ]]; then
   missing=1
 fi
 
+primary_gid="$(id -g)"
+supplementary_found=0
+for group_id in $(id -G); do
+  if [[ "${group_id}" != "${primary_gid}" ]]; then
+    supplementary_found=1
+    break
+  fi
+done
+
+if [[ "${supplementary_found}" -eq 0 ]]; then
+  echo "missing supplementary host groups (the vm suite uses one to verify token-mapped group access)" >&2
+  missing=1
+fi
+
 if [[ "${missing}" -ne 0 ]]; then
   exit 1
 fi

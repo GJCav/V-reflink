@@ -28,6 +28,9 @@ func TestLoadCLIDefaultsWithoutConfigFile(t *testing.T) {
 	if cfg.Timeout != defaultTimeout {
 		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, defaultTimeout)
 	}
+	if cfg.AuthToken != "" {
+		t.Fatalf("AuthToken = %q, want empty", cfg.AuthToken)
+	}
 }
 
 func TestLoadCLIFromXDGConfigFile(t *testing.T) {
@@ -39,6 +42,7 @@ VREFLINK_GUEST_MOUNT_ROOT=/mnt/shared
 VREFLINK_HOST_CID=7
 VREFLINK_VSOCK_PORT=20000
 VREFLINK_CLIENT_TIMEOUT=7s
+VREFLINK_AUTH_TOKEN=token-from-config
 `)
 
 	cfg, err := loadCLI(fixedUserConfigDir(configDir), emptyLookupEnv)
@@ -58,6 +62,9 @@ VREFLINK_CLIENT_TIMEOUT=7s
 	if cfg.Timeout != 7*time.Second {
 		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, 7*time.Second)
 	}
+	if cfg.AuthToken != "token-from-config" {
+		t.Fatalf("AuthToken = %q, want %q", cfg.AuthToken, "token-from-config")
+	}
 }
 
 func TestLoadCLIUsesXDGConfigHome(t *testing.T) {
@@ -68,6 +75,7 @@ func TestLoadCLIUsesXDGConfigHome(t *testing.T) {
 	t.Setenv("VREFLINK_HOST_CID", "")
 	t.Setenv("VREFLINK_VSOCK_PORT", "")
 	t.Setenv("VREFLINK_CLIENT_TIMEOUT", "")
+	t.Setenv("VREFLINK_AUTH_TOKEN", "")
 
 	writeCLIConfig(t, configDir, `
 VREFLINK_HOST_CID=13
@@ -92,6 +100,7 @@ VREFLINK_GUEST_MOUNT_ROOT=/mnt/shared
 VREFLINK_HOST_CID=7
 VREFLINK_VSOCK_PORT=20000
 VREFLINK_CLIENT_TIMEOUT=7s
+VREFLINK_AUTH_TOKEN=config-token
 `)
 
 	cfg, err := loadCLI(
@@ -101,6 +110,7 @@ VREFLINK_CLIENT_TIMEOUT=7s
 			"VREFLINK_HOST_CID":         "9",
 			"VREFLINK_VSOCK_PORT":       "21000",
 			"VREFLINK_CLIENT_TIMEOUT":   "9s",
+			"VREFLINK_AUTH_TOKEN":       "env-token",
 		}),
 	)
 	if err != nil {
@@ -118,6 +128,9 @@ VREFLINK_CLIENT_TIMEOUT=7s
 	}
 	if cfg.Timeout != 9*time.Second {
 		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, 9*time.Second)
+	}
+	if cfg.AuthToken != "env-token" {
+		t.Fatalf("AuthToken = %q, want %q", cfg.AuthToken, "env-token")
 	}
 }
 
@@ -145,6 +158,9 @@ VREFLINK_HOST_CID=7
 	}
 	if cfg.Timeout != defaultTimeout {
 		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, defaultTimeout)
+	}
+	if cfg.AuthToken != "" {
+		t.Fatalf("AuthToken = %q, want empty", cfg.AuthToken)
 	}
 }
 
@@ -188,6 +204,7 @@ export VREFLINK_HOST_CID=12
 
 VREFLINK_VSOCK_PORT=23000
 VREFLINK_CLIENT_TIMEOUT=11s
+VREFLINK_AUTH_TOKEN=group-token
 IGNORED_KEY=ignored
 `)
 
@@ -207,6 +224,56 @@ IGNORED_KEY=ignored
 	}
 	if cfg.Timeout != 11*time.Second {
 		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, 11*time.Second)
+	}
+	if cfg.AuthToken != "group-token" {
+		t.Fatalf("AuthToken = %q, want %q", cfg.AuthToken, "group-token")
+	}
+}
+
+func TestLoadDaemonDefaultsAndEnvironment(t *testing.T) {
+	t.Setenv("VREFLINK_SHARE_ROOT", "")
+	t.Setenv("VREFLINK_VSOCK_PORT", "")
+	t.Setenv("VREFLINK_READ_TIMEOUT", "")
+	t.Setenv("VREFLINK_WRITE_TIMEOUT", "")
+	t.Setenv("VREFLINK_TOKEN_MAP_PATH", "")
+	t.Setenv("VREFLINK_ALLOW_V1_FALLBACK", "")
+
+	cfg := LoadDaemon()
+	if cfg.ShareRoot != defaultShareRoot {
+		t.Fatalf("ShareRoot = %q, want %q", cfg.ShareRoot, defaultShareRoot)
+	}
+	if cfg.TokenMapPath != defaultTokenMap {
+		t.Fatalf("TokenMapPath = %q, want %q", cfg.TokenMapPath, defaultTokenMap)
+	}
+	if cfg.AllowV1Fallback {
+		t.Fatalf("AllowV1Fallback = %t, want false", cfg.AllowV1Fallback)
+	}
+
+	t.Setenv("VREFLINK_SHARE_ROOT", "/srv/custom")
+	t.Setenv("VREFLINK_VSOCK_PORT", "21000")
+	t.Setenv("VREFLINK_READ_TIMEOUT", "9s")
+	t.Setenv("VREFLINK_WRITE_TIMEOUT", "11s")
+	t.Setenv("VREFLINK_TOKEN_MAP_PATH", "/etc/vreflinkd/custom.yaml")
+	t.Setenv("VREFLINK_ALLOW_V1_FALLBACK", "true")
+
+	cfg = LoadDaemon()
+	if cfg.ShareRoot != "/srv/custom" {
+		t.Fatalf("ShareRoot = %q, want %q", cfg.ShareRoot, "/srv/custom")
+	}
+	if cfg.VsockPort != 21000 {
+		t.Fatalf("VsockPort = %d, want %d", cfg.VsockPort, 21000)
+	}
+	if cfg.ReadTimeout != 9*time.Second {
+		t.Fatalf("ReadTimeout = %s, want %s", cfg.ReadTimeout, 9*time.Second)
+	}
+	if cfg.WriteTimeout != 11*time.Second {
+		t.Fatalf("WriteTimeout = %s, want %s", cfg.WriteTimeout, 11*time.Second)
+	}
+	if cfg.TokenMapPath != "/etc/vreflinkd/custom.yaml" {
+		t.Fatalf("TokenMapPath = %q, want %q", cfg.TokenMapPath, "/etc/vreflinkd/custom.yaml")
+	}
+	if !cfg.AllowV1Fallback {
+		t.Fatalf("AllowV1Fallback = %t, want true", cfg.AllowV1Fallback)
 	}
 }
 

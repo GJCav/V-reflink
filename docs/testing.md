@@ -91,7 +91,14 @@ The VM suite expects:
 The VM runner will prepare the Ubuntu Minimal image on demand, build the test
 binaries, create a temporary loopback btrfs share root unless
 `VREFLINK_VM_SHARE_ROOT` is already set, boot the guest, mount virtiofs, run
-`vreflink`, and verify post-write copy-on-write behavior.
+`vreflink`, generate a temporary token map that points at the current host
+user's `uid`, `gid`, and supplementary groups, and verify post-write
+copy-on-write plus token-authenticated ownership behavior. It also checks the
+default fail-closed startup path when the token map is missing and the explicit
+legacy fallback mode.
+
+The VM suite also expects the current host user to have at least one
+supplementary group so it can cover the group-based access case.
 
 ## VM Environment Variables
 
@@ -113,18 +120,6 @@ If `VREFLINK_VM_DISK`, `VREFLINK_VM_SSH_USER`, or `VREFLINK_VM_SSH_KEY` are not
 set, the VM suite will populate them automatically by calling
 `scripts/test/vm/prepare-image.sh`.
 
-## Proxy Use
-
-If your environment needs a proxy for image downloads or package fetches, set
-the standard proxy variables before running the scripts:
-
-```bash
-export HTTP_PROXY=http://your-proxy:port
-export HTTPS_PROXY=http://your-proxy:port
-```
-
-The VM helper scripts inherit those environment variables automatically.
-
 ## Troubleshooting
 
 - Missing `virtiofsd`: install it or ensure `/usr/lib/qemu/virtiofsd` exists.
@@ -132,3 +127,5 @@ The VM helper scripts inherit those environment variables automatically.
 - Missing `/dev/vhost-vsock`: load the module with `sudo modprobe vhost_vsock`.
 - Non-btrfs workspace: `scripts/test/run.sh btrfs` requires the repository
   workspace to live on btrfs.
+- Missing supplementary groups: the VM suite needs at least one host
+  supplementary group to verify token-mapped group authorization.

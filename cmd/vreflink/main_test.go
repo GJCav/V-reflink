@@ -21,6 +21,7 @@ func TestResolveRuntimeConfigFlagsOverrideLoadedValues(t *testing.T) {
 		HostCID:        2,
 		VsockPort:      19090,
 		Timeout:        5 * time.Second,
+		AuthToken:      "config-token",
 	})
 
 	if err := cmd.ParseFlags([]string{
@@ -28,6 +29,7 @@ func TestResolveRuntimeConfigFlagsOverrideLoadedValues(t *testing.T) {
 		"--cid", "7",
 		"--port", "20000",
 		"--timeout", "7s",
+		"--token", "flag-token",
 	}); err != nil {
 		t.Fatalf("ParseFlags() error = %v", err)
 	}
@@ -38,8 +40,9 @@ func TestResolveRuntimeConfigFlagsOverrideLoadedValues(t *testing.T) {
 			HostCID:        2,
 			VsockPort:      19090,
 			Timeout:        5 * time.Second,
+			AuthToken:      "config-token",
 		}, nil
-	}, "/override", 7, 20000, 7*time.Second)
+	}, "/override", 7, 20000, 7*time.Second, "flag-token")
 	if err != nil {
 		t.Fatalf("resolveRuntimeConfig() error = %v", err)
 	}
@@ -55,6 +58,9 @@ func TestResolveRuntimeConfigFlagsOverrideLoadedValues(t *testing.T) {
 	}
 	if cfg.Timeout != 7*time.Second {
 		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, 7*time.Second)
+	}
+	if cfg.AuthToken != "flag-token" {
+		t.Fatalf("AuthToken = %q, want %q", cfg.AuthToken, "flag-token")
 	}
 }
 
@@ -173,6 +179,7 @@ func TestCommandResolvesRelativePathsFromWorkingDirectory(t *testing.T) {
 		HostCID:        2,
 		VsockPort:      19090,
 		Timeout:        5 * time.Second,
+		AuthToken:      "guest-token",
 	}
 
 	var gotReq protocol.Request
@@ -195,5 +202,27 @@ func TestCommandResolvesRelativePathsFromWorkingDirectory(t *testing.T) {
 	}
 	if gotReq.Dst != "project/nested/dst.txt" {
 		t.Fatalf("Dst = %q, want %q", gotReq.Dst, "project/nested/dst.txt")
+	}
+	if gotReq.Version != protocol.Version2 {
+		t.Fatalf("Version = %d, want %d", gotReq.Version, protocol.Version2)
+	}
+	if gotReq.Token != "guest-token" {
+		t.Fatalf("Token = %q, want %q", gotReq.Token, "guest-token")
+	}
+}
+
+func TestBuildRequestUsesVersion1WithoutToken(t *testing.T) {
+	t.Parallel()
+
+	req, err := buildRequest(config.CLI{GuestMountRoot: "/shared"}, "/shared/project", "src.txt", "dst.txt", false)
+	if err != nil {
+		t.Fatalf("buildRequest() error = %v", err)
+	}
+
+	if req.Version != protocol.Version1 {
+		t.Fatalf("Version = %d, want %d", req.Version, protocol.Version1)
+	}
+	if req.Token != "" {
+		t.Fatalf("Token = %q, want empty", req.Token)
 	}
 }

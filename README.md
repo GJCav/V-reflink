@@ -90,6 +90,7 @@ In short:
 ```bash
 vreflink SRC DST
 vreflink -r SRC DST
+vreflink --token TOKEN SRC DST
 ```
 
 Success means the host executed a real reflink. There is no copy fallback.
@@ -99,16 +100,16 @@ Success means the host executed a real reflink. There is no copy fallback.
 Host:
 
 ```bash
-vreflinkd --share-root /srv/labshare --port 19090
+vreflinkd --share-root /srv/labshare --token-map-path /etc/vreflinkd/tokens.yaml --port 19090
 ```
 
 Guest:
 
 ```bash
-vreflink /shared/A /shared/B
-vreflink -r /shared/dirA /shared/dirB
+vreflink --token project-a-token /shared/A /shared/B
+vreflink -r --token project-a-token /shared/dirA /shared/dirB
 cd /shared/project
-vreflink data/A data/B
+vreflink --token project-a-token data/A data/B
 ```
 
 `vreflink` can auto-load its common guest-side settings from
@@ -116,8 +117,8 @@ vreflink data/A data/B
 Without that file, you can still use explicit flags:
 
 ```bash
-vreflink --mount-root /shared --cid 2 --port 19090 /shared/A /shared/B
-vreflink -r --mount-root /shared --cid 2 --port 19090 /shared/dirA /shared/dirB
+vreflink --token project-a-token --mount-root /shared --cid 2 --port 19090 /shared/A /shared/B
+vreflink -r --token project-a-token --mount-root /shared --cid 2 --port 19090 /shared/dirA /shared/dirB
 ```
 
 Relative `SRC` and `DST` arguments are resolved from the current working
@@ -146,6 +147,7 @@ Example guest config file:
 VREFLINK_GUEST_MOUNT_ROOT=/shared
 VREFLINK_HOST_CID=2
 VREFLINK_VSOCK_PORT=19090
+VREFLINK_AUTH_TOKEN=project-a-token
 ```
 
 CLI keys:
@@ -154,6 +156,7 @@ CLI keys:
 - `VREFLINK_HOST_CID` default: `2`
 - `VREFLINK_VSOCK_PORT` default: `19090`
 - `VREFLINK_CLIENT_TIMEOUT` default: `5s`
+- `VREFLINK_AUTH_TOKEN` default: empty
 
 If the XDG config file exists but is malformed, `vreflink` exits with a clear
 startup error.
@@ -167,10 +170,37 @@ daemon environment variables below, typically through systemd.
 - `VREFLINK_VSOCK_PORT` default: `19090`
 - `VREFLINK_READ_TIMEOUT` default: `5s`
 - `VREFLINK_WRITE_TIMEOUT` default: `5s`
+- `VREFLINK_ALLOW_V1_FALLBACK` default: `false`
+- `VREFLINK_TOKEN_MAP_PATH` default: `/etc/vreflinkd/tokens.yaml`
 
 `vreflinkd` validates `VREFLINK_SHARE_ROOT` before it starts listening. Startup
 fails if the path does not exist, is not a directory, is not writable for the
 probe files, or cannot complete a reflink probe.
+
+When the token-map path points to an existing YAML file, `vreflinkd` switches
+to protocol v2 and requires authenticated requests. The guest sends only a
+bearer token; the host maps that token to a configured host identity and runs
+the reflink work under that identity.
+
+Example host token map:
+
+```yaml
+version: 1
+tokens:
+  - name: project-a
+    token: "project-a-token"
+    uid: 1001
+    gid: 1001
+    groups: [44]
+```
+
+Recommended operational permissions for that file are owner `root` and mode
+`0600`. `groups` is the supplementary-group list only and should not repeat the
+primary `gid`. By default, `vreflinkd` now fails startup if the configured
+token-map file is missing. Set `VREFLINK_ALLOW_V1_FALLBACK=true` only if you
+explicitly want to re-enable unauthenticated legacy v1 mode. This token mapping
+is intentionally a trusted-guest design for project VMs, not a per-user
+attestation scheme inside the guest.
 
 ## Testing
 
@@ -210,7 +240,9 @@ The package installs:
 - `/lib/systemd/system/vreflinkd.service`
 - `/etc/default/vreflinkd`
 
-The service is installed but disabled by default.
+The service is installed but disabled by default. Operators create
+`/etc/vreflinkd/tokens.yaml` separately when enabling protocol v2 token
+authentication. Legacy v1 fallback is disabled by default.
 
 Manual binary install:
 
@@ -239,6 +271,9 @@ Local artifact build details live in [`docs/releasing.md`](docs/releasing.md).
   tree may remain after the first error.
 - The daemon refuses startup if the configured share root is not a usable
   reflink-capable directory.
+- Raw filesystem authorization failures are reported as `permission denied`,
+  while path-containment failures keep their explicit shared-root messages.
+- Missing or unknown authentication tokens fail once a token map is configured.
 - There is no fallback copy path. If the host filesystem does not support
   reflinks for the requested source and destination, the request fails with
   `EOPNOTSUPP`.

@@ -12,6 +12,7 @@ import (
 
 const (
 	Version1  = 1
+	Version2  = 2
 	OpReflink = "reflink"
 )
 
@@ -31,6 +32,7 @@ type Request struct {
 	Recursive bool   `json:"recursive"`
 	Src       string `json:"src"`
 	Dst       string `json:"dst"`
+	Token     string `json:"token,omitempty"`
 }
 
 type Response struct {
@@ -59,10 +61,14 @@ func (e *CodedError) Unwrap() error {
 
 func (r Request) Validate() error {
 	switch {
-	case r.Version != Version1:
+	case r.Version != Version1 && r.Version != Version2:
 		return NewError(CodeEINVAL, fmt.Sprintf("unsupported protocol version: %d", r.Version))
 	case r.Op != OpReflink:
 		return NewError(CodeEINVAL, fmt.Sprintf("unsupported operation: %s", r.Op))
+	case r.Version == Version1 && r.Token != "":
+		return NewError(CodeEINVAL, "authentication token requires protocol version 2")
+	case r.Version == Version2 && r.Token == "":
+		return NewError(CodeEINVAL, "authentication token is required")
 	case r.Src == "":
 		return NewError(CodeEINVAL, "source path is required")
 	case r.Dst == "":
@@ -148,7 +154,7 @@ func MessageFromError(err error) string {
 	case CodeEOPNOTSUPP:
 		return "reflink is not supported for this source and destination"
 	case CodeEPERM:
-		return "path must stay within the shared root"
+		return "permission denied"
 	case CodeEINVAL:
 		if err != nil {
 			return err.Error()

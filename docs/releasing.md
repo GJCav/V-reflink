@@ -25,7 +25,10 @@ It installs:
 - `/lib/systemd/system/vreflinkd.service`
 - `/etc/default/vreflinkd`
 
-The package does not enable or start `vreflinkd` automatically.
+The package does not enable or start `vreflinkd` automatically. It also does
+not ship `/etc/vreflinkd/tokens.yaml`; operators create that YAML token map
+separately when enabling protocol v2 authentication. Legacy v1 fallback is
+disabled by default unless `VREFLINK_ALLOW_V1_FALLBACK=true` is set.
 
 The tarball contains the same binaries plus the packaged templates so users on
 other Linux distributions can copy the files into place manually.
