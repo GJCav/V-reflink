@@ -19,6 +19,11 @@ import (
 
 type requestFunc func(context.Context, config.CLI, protocol.Request) (*protocol.Response, error)
 
+const (
+	missingTokenDaemonMessage = "token-authenticated requests require protocol version 2"
+	missingTokenHintMessage   = "authentication token is required; set token in config or pass --token"
+)
+
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "vreflink: %s\n", err)
@@ -89,9 +94,10 @@ func newRootCmdWithDependencies(
 				return errors.New("daemon returned an unknown error")
 			}
 
+			message := responseErrorMessage(req, resp.Error)
 			return &protocol.CodedError{
 				Code:    resp.Error.Code,
-				Message: resp.Error.Message,
+				Message: message,
 			}
 		},
 	}
@@ -137,6 +143,20 @@ func buildRequest(cfg config.CLI, cwd, srcArg, dstArg string, recursive bool) (p
 func executeRequest(ctx context.Context, cfg config.CLI, req protocol.Request) (*protocol.Response, error) {
 	cli := client.New(cfg.HostCID, cfg.VsockPort, cfg.Timeout)
 	return cli.Do(ctx, req)
+}
+
+func responseErrorMessage(req protocol.Request, detail *protocol.ErrorDetail) string {
+	if detail == nil {
+		return ""
+	}
+
+	if req.Version == protocol.Version1 && req.Token == "" &&
+		detail.Code == protocol.CodeEINVAL &&
+		detail.Message == missingTokenDaemonMessage {
+		return missingTokenHintMessage
+	}
+
+	return detail.Message
 }
 
 func resolveRuntimeConfig(cmd *cobra.Command, loadConfig func() (config.CLI, error), mountRoot string, hostCID, port uint32, timeout time.Duration, authToken string) (config.CLI, error) {

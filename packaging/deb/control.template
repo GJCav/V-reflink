@@ -6,4 +6,4 @@ Architecture: @ARCH@
 Maintainer: vreflink contributors
 Description: guest CLI and host daemon for host-side reflinks over virtiofs
  The package installs both the guest-side vreflink CLI and the host-side
- vreflinkd daemon, plus the default systemd unit and defaults file.
+ vreflinkd daemon, plus the default systemd unit and packaged config templates.

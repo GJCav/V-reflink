@@ -314,7 +314,7 @@ disable_root: true
 	}
 	assertSameFileContents(t, filepath.Join(shareRoot, "data", "A"), filepath.Join(shareRoot, "data", "fallback-B"))
 
-	if _, err := runGuest(ctx, sshBase, fmt.Sprintf("set +e; /shared/bin/vreflink --mount-root /shared --cid 2 --port %d /shared/data/A /shared/data/no-token-B > /tmp/vreflink-no-token.log 2>&1; status=$?; set -e; test $status -ne 0; grep -q 'protocol version 2' /tmp/vreflink-no-token.log", cfg.HostPort)); err != nil {
+	if _, err := runGuest(ctx, sshBase, fmt.Sprintf("set +e; /shared/bin/vreflink --mount-root /shared --cid 2 --port %d /shared/data/A /shared/data/no-token-B > /tmp/vreflink-no-token.log 2>&1; status=$?; set -e; test $status -ne 0; grep -q 'authentication token is required; set token in config or pass --token' /tmp/vreflink-no-token.log", cfg.HostPort)); err != nil {
 		t.Fatalf("missing-token guest check error = %v", err)
 	}
 	if _, err := runGuest(ctx, sshBase, fmt.Sprintf("set +e; /shared/bin/vreflink --token wrong-token --mount-root /shared --cid 2 --port %d /shared/data/A /shared/data/bad-token-B > /tmp/vreflink-bad-token.log 2>&1; status=$?; set -e; test $status -ne 0; grep -q 'invalid authentication token' /tmp/vreflink-bad-token.log", cfg.HostPort)); err != nil {

@@ -87,6 +87,17 @@ In short:
 
 ## Installation
 
+### Prerequisites
+
+`vreflink` is designed for an existing host/guest workflow rather than
+provisioning one for you. In the intended setup, the host share is backed by a
+reflink-capable filesystem, the guest reaches that share through virtiofs, and
+the guest and host can communicate over vsock.
+
+KVM/QEMU with `virtiofsd` is a typical way to provide that environment, but
+those pieces are workflow assumptions rather than extra requirements that
+`vreflink` installs or manages for you.
+
 Recommended: install the Debian package on both the host and the guest.
 
 ```bash
@@ -101,9 +112,12 @@ The package installs:
 - `/etc/vreflinkd/config.toml`
 - `/usr/share/vreflink/config.toml`
 
-The package gives you the whole picture at once: `vreflink` runs in the guest,
-`vreflinkd` runs on the host, and the packaged config templates show the
-expected file layout. The service is installed but disabled by default, so edit
+The package intentionally ships both the guest-side CLI and the host-side
+daemon on both sides. That keeps installation symmetrical between host and
+guest, and it keeps the packaged templates and documented file layout aligned
+wherever you inspect the package.
+
+The service is installed but disabled by default, so edit
 `/etc/vreflinkd/config.toml` before enabling it.
 
 Manual install is also available. Recommended manual source: download the

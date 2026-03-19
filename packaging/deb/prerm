@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+remove|upgrade|deconfigure)
+	if command -v deb-systemd-invoke >/dev/null 2>&1; then
+		deb-systemd-invoke stop vreflinkd.service >/dev/null || true
+	elif command -v systemctl >/dev/null 2>&1; then
+		systemctl --system stop vreflinkd.service >/dev/null || true
+	fi
+	;;
+esac
+
+case "$1" in
+remove|deconfigure)
+	if command -v deb-systemd-helper >/dev/null 2>&1; then
+		deb-systemd-helper disable vreflinkd.service >/dev/null || true
+	elif command -v systemctl >/dev/null 2>&1; then
+		systemctl --system disable vreflinkd.service >/dev/null || true
+	fi
+	;;
+esac
+
+exit 0

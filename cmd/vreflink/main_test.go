@@ -203,3 +203,85 @@ func TestBuildRequestUsesVersion1WithoutToken(t *testing.T) {
 		t.Fatalf("Token = %q, want empty", req.Token)
 	}
 }
+
+func TestRootCommandRewritesMissingTokenResponse(t *testing.T) {
+	t.Parallel()
+
+	cmd := newRootCmdWithDependencies(
+		func() (config.CLI, error) {
+			return config.CLI{
+				GuestMountRoot: "/shared",
+				HostCID:        2,
+				VsockPort:      19090,
+				Timeout:        5 * time.Second,
+			}, nil
+		},
+		func() (string, error) { return "/shared/project", nil },
+		func(_ context.Context, _ config.CLI, req protocol.Request) (*protocol.Response, error) {
+			if req.Version != protocol.Version1 {
+				t.Fatalf("Version = %d, want %d", req.Version, protocol.Version1)
+			}
+			return &protocol.Response{
+				OK: false,
+				Error: &protocol.ErrorDetail{
+					Code:    protocol.CodeEINVAL,
+					Message: missingTokenDaemonMessage,
+				},
+			}, nil
+		},
+	)
+	cmd.SetArgs([]string{"src.txt", "dst.txt"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() unexpectedly succeeded")
+	}
+
+	coded, ok := protocol.AsCoded(err)
+	if !ok {
+		t.Fatalf("Execute() error = %v, want coded error", err)
+	}
+	if coded.Message != missingTokenHintMessage {
+		t.Fatalf("Message = %q, want %q", coded.Message, missingTokenHintMessage)
+	}
+}
+
+func TestRootCommandPreservesOtherDaemonErrors(t *testing.T) {
+	t.Parallel()
+
+	cmd := newRootCmdWithDependencies(
+		func() (config.CLI, error) {
+			return config.CLI{
+				GuestMountRoot: "/shared",
+				HostCID:        2,
+				VsockPort:      19090,
+				Timeout:        5 * time.Second,
+				AuthToken:      "wrong-token",
+			}, nil
+		},
+		func() (string, error) { return "/shared/project", nil },
+		func(_ context.Context, _ config.CLI, _ protocol.Request) (*protocol.Response, error) {
+			return &protocol.Response{
+				OK: false,
+				Error: &protocol.ErrorDetail{
+					Code:    protocol.CodeEPERM,
+					Message: "invalid authentication token",
+				},
+			}, nil
+		},
+	)
+	cmd.SetArgs([]string{"src.txt", "dst.txt"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() unexpectedly succeeded")
+	}
+
+	coded, ok := protocol.AsCoded(err)
+	if !ok {
+		t.Fatalf("Execute() error = %v, want coded error", err)
+	}
+	if coded.Message != "invalid authentication token" {
+		t.Fatalf("Message = %q, want %q", coded.Message, "invalid authentication token")
+	}
+}

@@ -92,6 +92,7 @@ func Build(ctx context.Context, opts Options) (Artifacts, error) {
 		filepath.Join(tarRoot, "etc", "vreflinkd"),
 		filepath.Join(tarRoot, "share", "vreflink"),
 		filepath.Join(debRoot, "usr", "bin"),
+		filepath.Join(debRoot, "usr", "share", "vreflink"),
 		filepath.Join(debRoot, "lib", "systemd", "system"),
 		filepath.Join(debRoot, "etc", "vreflinkd"),
 		debControlDir,
@@ -143,11 +144,23 @@ func Build(ctx context.Context, opts Options) (Artifacts, error) {
 	if err := writeFile(filepath.Join(debRoot, "etc", "vreflinkd", "config.toml"), pkgassets.DaemonConfigTemplate(), 0o600); err != nil {
 		return Artifacts{}, err
 	}
+	if err := writeFile(filepath.Join(debRoot, "usr", "share", "vreflink", "config.toml"), pkgassets.GuestConfigTemplate(), 0o644); err != nil {
+		return Artifacts{}, err
+	}
+	if err := writeFile(filepath.Join(debControlDir, "conffiles"), pkgassets.DebConffiles(), 0o644); err != nil {
+		return Artifacts{}, err
+	}
 
 	control := string(pkgassets.DebControlTemplate())
 	control = strings.ReplaceAll(control, "@VERSION@", opts.Version)
 	control = strings.ReplaceAll(control, "@ARCH@", arch)
 	if err := writeFile(filepath.Join(debControlDir, "control"), []byte(control), 0o644); err != nil {
+		return Artifacts{}, err
+	}
+	if err := writeFile(filepath.Join(debControlDir, "prerm"), pkgassets.DebPrerm(), 0o755); err != nil {
+		return Artifacts{}, err
+	}
+	if err := writeFile(filepath.Join(debControlDir, "postrm"), pkgassets.DebPostrm(), 0o755); err != nil {
 		return Artifacts{}, err
 	}
 

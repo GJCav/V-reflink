@@ -26,6 +26,10 @@ It installs:
 - `/etc/vreflinkd/config.toml`
 - `/usr/share/vreflink/config.toml`
 
+The package intentionally carries both the guest CLI and the host daemon
+together. That keeps the packaged templates and documented layout consistent on
+both the host and the guest.
+
 The package does not enable or start `vreflinkd` automatically. Operators edit
 `/etc/vreflinkd/config.toml` to set the real `share_root`, token mappings, and
 any optional `allow_v1_fallback = true` override before enabling the service.
@@ -43,7 +47,8 @@ Run the packaging/release verification stage with:
 go run ./cmd/vreflink-dev test release
 ```
 
-This stage builds the artifacts, inspects the `.deb` contents, installs it into
-a temporary Debian package root, checks the installed file layout, runs
-`vreflink --help` and `vreflinkd --help`, and verifies the service is not
-enabled by default.
+This stage builds the artifacts, inspects the `.deb` contents and control
+metadata, installs it into a temporary Debian package root, checks the
+installed file layout, runs `vreflink --help` and `vreflinkd --help`, and
+verifies remove/purge lifecycle behavior without enabling the service by
+default.

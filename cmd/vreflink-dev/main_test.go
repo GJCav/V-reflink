@@ -100,6 +100,32 @@ func TestVMSuiteRejectsRace(t *testing.T) {
 	}
 }
 
+func TestReleaseSuiteUsesTaggedGoTest(t *testing.T) {
+	var calls [][]string
+
+	cmd := newRootCmdWithDeps(deps{
+		repoRoot: func() (string, error) { return "/repo", nil },
+		runCommand: func(_ context.Context, _ string, _ []string, _ io.Writer, _ io.Writer, _ string, args ...string) error {
+			calls = append(calls, append([]string(nil), args...))
+			return nil
+		},
+	})
+	cmd.SetArgs([]string{"test", "release"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if len(calls) != 1 {
+		t.Fatalf("runCommand calls = %d, want 1", len(calls))
+	}
+	got := strings.Join(calls[0], " ")
+	want := "test -count=1 -tags releasetest ./integration/release"
+	if got != want {
+		t.Fatalf("go args = %q, want %q", got, want)
+	}
+}
+
 func TestAllRunsExpectedSuites(t *testing.T) {
 	var calls [][]string
 

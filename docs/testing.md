@@ -8,8 +8,8 @@ go run ./cmd/vreflink-dev test <quick|reflinkfs|vm|release|all> [--race]
 
 `quick` is the default suite. Run `reflinkfs` when you need real local reflink
 coverage and `vm` when you need the full guest/host virtiofs + vsock path. The
-runner is the supported interface for both privileged suites and will provision
-their temporary reflink-capable scratch roots for you.
+runner is the supported interface for the privileged suites and the preferred
+interface for release packaging checks.
 
 ## Suite Matrix
 
@@ -18,7 +18,7 @@ their temporary reflink-capable scratch roots for you.
 | `quick` | `go run ./cmd/vreflink-dev test quick` | Fast default Go tests | `go` |
 | `reflinkfs` | `go run ./cmd/vreflink-dev test reflinkfs` | Real local reflink + COW checks | root or non-interactive `sudo`, `mkfs.btrfs` |
 | `vm` | `go run ./cmd/vreflink-dev test vm` | Full virtiofs + vsock integration | root or non-interactive `sudo`, QEMU + VM prerequisites |
-| `release` | `go run ./cmd/vreflink-dev test release` | Tarball + `.deb` build and install smoke tests | `dpkg`, `dpkg-deb` |
+| `release` | `go run ./cmd/vreflink-dev test release` | Tarball + `.deb` build, install, remove, and purge verification | `dpkg`, `dpkg-deb` |
 | `all` | `go run ./cmd/vreflink-dev test all` | Run `quick`, then `reflinkfs`, then `vm` | all of the above |
 
 Race detector support:
@@ -62,7 +62,7 @@ environment yourself:
 go test ./...
 VREFLINK_TEST_REFLINK_ROOT=/prepared/reflink-root go test -tags reflinkfstest ./internal/service
 VREFLINK_VM_SHARE_ROOT=/prepared/share-root go test -tags vmtest ./integration/vm
-go test -tags releasetest ./integration/release
+go test -count=1 -tags releasetest ./integration/release
 ```
 
 If you do not already have those prepared roots, use `go run ./cmd/vreflink-dev
