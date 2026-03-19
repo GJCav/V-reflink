@@ -202,6 +202,10 @@ Relative `SRC` and `DST` arguments are resolved from the current working
 directory, but the resolved paths must still stay within the configured guest
 mount root.
 
+In recursive mode, destination directories preserve the source tree's
+directory mode bits. Ownership still follows the mapped host identity and the
+host's normal parent-directory inheritance rules.
+
 ## Authentication
 
 Protocol v2 uses a bearer token from the guest and a host-side token map in

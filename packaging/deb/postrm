@@ -8,11 +8,13 @@ purge)
 	fi
 	if command -v systemctl >/dev/null 2>&1; then
 		systemctl --system daemon-reload >/dev/null || true
+		systemctl --system reset-failed vreflinkd.service >/dev/null || true
 	fi
 	;;
 remove)
 	if command -v systemctl >/dev/null 2>&1; then
 		systemctl --system daemon-reload >/dev/null || true
+		systemctl --system reset-failed vreflinkd.service >/dev/null || true
 	fi
 	;;
 esac

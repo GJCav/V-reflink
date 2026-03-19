@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/mdlayher/vsock"
@@ -44,7 +45,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	for {
 		conn, err := s.Listener.Accept()
 		if err != nil {
-			if ctx.Err() != nil && errors.Is(err, net.ErrClosed) {
+			if ctx.Err() != nil && isExpectedShutdownAcceptError(err) {
 				return nil
 			}
 			return err
@@ -102,4 +103,19 @@ func peerFromAddr(addr net.Addr) PeerInfo {
 	}
 
 	return PeerInfo{CID: vsockAddr.ContextID}
+}
+
+func isExpectedShutdownAcceptError(err error) bool {
+	if errors.Is(err, net.ErrClosed) {
+		return true
+	}
+
+	var opErr *net.OpError
+	if !errors.As(err, &opErr) {
+		return false
+	}
+
+	return opErr.Op == "accept" &&
+		opErr.Err != nil &&
+		strings.Contains(opErr.Err.Error(), "use of closed network connection")
 }

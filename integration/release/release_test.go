@@ -226,10 +226,14 @@ func TestReleaseArtifacts(t *testing.T) {
 		"deb-systemd-invoke stop vreflinkd.service",
 		"deb-systemd-helper disable vreflinkd.service",
 		"systemctl --system daemon-reload",
+		"systemctl --system reset-failed vreflinkd.service",
 	} {
 		if !strings.Contains(string(toolLog), want) {
 			t.Fatalf("maintainer tool log = %q, want %q", string(toolLog), want)
 		}
+	}
+	if got := strings.Count(string(toolLog), "systemctl --system reset-failed vreflinkd.service"); got != 1 {
+		t.Fatalf("reset-failed count after remove = %d, want 1", got)
 	}
 
 	result, err = runDpkg(ctx, rootDir, "--purge", "vreflink")
@@ -246,6 +250,9 @@ func TestReleaseArtifacts(t *testing.T) {
 	}
 	if !strings.Contains(string(toolLog), "deb-systemd-helper purge vreflinkd.service") {
 		t.Fatalf("maintainer tool log = %q, want purge entry", string(toolLog))
+	}
+	if got := strings.Count(string(toolLog), "systemctl --system reset-failed vreflinkd.service"); got != 2 {
+		t.Fatalf("reset-failed count after purge = %d, want 2", got)
 	}
 }
 
@@ -338,6 +345,10 @@ disable)
 daemon-reload)
 	mkdir -p "${DPKG_ROOT}/run"
 	: > "${DPKG_ROOT}/run/systemd-daemon-reload"
+	;;
+reset-failed)
+	mkdir -p "${DPKG_ROOT}/run"
+	: > "${DPKG_ROOT}/run/systemd-reset-failed"
 	;;
 esac
 `)

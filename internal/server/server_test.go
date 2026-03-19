@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,3 +65,89 @@ func TestClientServerRoundTrip(t *testing.T) {
 		t.Fatalf("Server.Serve() error = %v", err)
 	}
 }
+
+func TestServeReturnsNilOnCanceledContextWithClosedVsockAcceptError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	listener := newBlockingAcceptErrorListener(&net.OpError{
+		Op:  "accept",
+		Net: "vsock",
+		Err: errors.New("use of closed network connection"),
+	})
+	srv := &Server{
+		Listener: listener,
+		Handler: func(_ context.Context, _ protocol.Request, _ PeerInfo) protocol.Response {
+			return protocol.SuccessResponse()
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- srv.Serve(ctx)
+	}()
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Server.Serve() error = %v, want nil", err)
+	}
+}
+
+func TestServeReturnsAcceptErrorWhenShutdownErrorIsUnexpected(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wantErr := errors.New("accept failed")
+	listener := newBlockingAcceptErrorListener(wantErr)
+	srv := &Server{
+		Listener: listener,
+		Handler: func(_ context.Context, _ protocol.Request, _ PeerInfo) protocol.Response {
+			return protocol.SuccessResponse()
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- srv.Serve(ctx)
+	}()
+
+	cancel()
+	if err := <-done; !errors.Is(err, wantErr) {
+		t.Fatalf("Server.Serve() error = %v, want %v", err, wantErr)
+	}
+}
+
+type blockingAcceptErrorListener struct {
+	acceptErr error
+	closed    chan struct{}
+	once      sync.Once
+}
+
+func newBlockingAcceptErrorListener(acceptErr error) *blockingAcceptErrorListener {
+	return &blockingAcceptErrorListener{
+		acceptErr: acceptErr,
+		closed:    make(chan struct{}),
+	}
+}
+
+func (l *blockingAcceptErrorListener) Accept() (net.Conn, error) {
+	<-l.closed
+	return nil, l.acceptErr
+}
+
+func (l *blockingAcceptErrorListener) Close() error {
+	l.once.Do(func() {
+		close(l.closed)
+	})
+	return nil
+}
+
+func (l *blockingAcceptErrorListener) Addr() net.Addr {
+	return stubAddr("vsock")
+}
+
+type stubAddr string
+
+func (a stubAddr) Network() string { return string(a) }
+
+func (a stubAddr) String() string { return string(a) }
