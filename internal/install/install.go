@@ -2,65 +2,9 @@ package install
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 )
-
-const (
-	GuestBinaryName = "vreflink"
-	HostBinaryName  = "vreflinkd"
-)
-
-type HostResult struct {
-	BinaryPath  string
-	SystemdPath string
-	ConfigPath  string
-}
-
-func InstallBinary(executablePath, binDir, binaryName string) (string, error) {
-	if executablePath == "" {
-		return "", fmt.Errorf("executable path is required")
-	}
-	if binDir == "" {
-		return "", fmt.Errorf("binary directory is required")
-	}
-
-	dstPath := filepath.Join(binDir, binaryName)
-	if err := copyFile(executablePath, dstPath, 0o755); err != nil {
-		return "", err
-	}
-
-	return dstPath, nil
-}
-
-func InstallHost(executablePath, binDir, systemdDir, configPath string, systemdUnit, daemonConfig []byte) (HostResult, error) {
-	if systemdDir == "" {
-		return HostResult{}, fmt.Errorf("systemd directory is required")
-	}
-	if configPath == "" {
-		return HostResult{}, fmt.Errorf("config path is required")
-	}
-
-	binaryPath, err := InstallBinary(executablePath, binDir, HostBinaryName)
-	if err != nil {
-		return HostResult{}, err
-	}
-
-	systemdPath := filepath.Join(systemdDir, HostBinaryName+".service")
-	if err := WriteTemplate(systemdPath, systemdUnit, 0o644, true); err != nil {
-		return HostResult{}, err
-	}
-	if err := WriteTemplate(configPath, daemonConfig, 0o600, true); err != nil {
-		return HostResult{}, err
-	}
-
-	return HostResult{
-		BinaryPath:  binaryPath,
-		SystemdPath: systemdPath,
-		ConfigPath:  configPath,
-	}, nil
-}
 
 func WriteTemplate(path string, content []byte, mode os.FileMode, overwrite bool) error {
 	if path == "" {
@@ -109,32 +53,4 @@ func WriteTemplate(path string, content []byte, mode os.FileMode, overwrite bool
 
 	cleanup = false
 	return nil
-}
-
-func copyFile(srcPath, dstPath string, mode os.FileMode) error {
-	src, err := os.Open(srcPath)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-		return err
-	}
-
-	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
-	if err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(dst, src); err != nil {
-		_ = dst.Close()
-		return err
-	}
-	if err := dst.Chmod(mode); err != nil {
-		_ = dst.Close()
-		return err
-	}
-
-	return dst.Close()
 }

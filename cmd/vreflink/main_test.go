@@ -137,37 +137,14 @@ func TestConfigInitForceOverwritesMalformedConfig(t *testing.T) {
 	}
 }
 
-func TestInstallCopiesCurrentExecutable(t *testing.T) {
+func TestRootCommandDoesNotExposeInstallSubcommand(t *testing.T) {
 	t.Parallel()
 
-	executablePath, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
-	}
-
-	binDir := filepath.Join(t.TempDir(), "bin")
 	cmd := newRootCmd()
-	output := &bytes.Buffer{}
-	cmd.SetOut(output)
-	cmd.SetErr(output)
-	cmd.SetArgs([]string{"install", "--bin-dir", binDir})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	installedPath := filepath.Join(binDir, "vreflink")
-	got, err := os.ReadFile(installedPath)
-	if err != nil {
-		t.Fatalf("os.ReadFile() error = %v", err)
-	}
-	want, err := os.ReadFile(executablePath)
-	if err != nil {
-		t.Fatalf("os.ReadFile() error = %v", err)
-	}
-
-	if !bytes.Equal(got, want) {
-		t.Fatal("installed binary does not match current executable")
+	for _, sub := range cmd.Commands() {
+		if sub.Name() == "install" {
+			t.Fatal("install subcommand unexpectedly present")
+		}
 	}
 }
 

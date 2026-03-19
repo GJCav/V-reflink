@@ -85,98 +85,61 @@ In short:
 - vsock carries the reflink request.
 - the host filesystem decides whether the reflink is valid and supported.
 
-## Commands
+## Installation
+
+Recommended: install the Debian package on both the host and the guest.
 
 ```bash
-vreflink SRC DST
-vreflink -r SRC DST
-vreflink --token TOKEN SRC DST
+sudo dpkg -i ./vreflink_<version>_amd64.deb
 ```
 
-Success means the host executed a real reflink. There is no copy fallback.
+The package installs:
 
-## Usage
+- `/usr/bin/vreflink`
+- `/usr/bin/vreflinkd`
+- `/lib/systemd/system/vreflinkd.service`
+- `/etc/vreflinkd/config.toml`
+- `/usr/share/vreflink/config.toml`
 
-Host:
+The package gives you the whole picture at once: `vreflink` runs in the guest,
+`vreflinkd` runs on the host, and the packaged config templates show the
+expected file layout. The service is installed but disabled by default, so edit
+`/etc/vreflinkd/config.toml` before enabling it.
+
+Manual install is also available. Recommended manual source: download the
+pre-built binaries and templates from GitHub Releases. If you want to build the
+artifacts yourself, use the workflow documented in
+[`docs/releasing.md`](docs/releasing.md).
+
+Guest manual install:
 
 ```bash
-vreflinkd -c /etc/vreflinkd/config.toml
+sudo install -m 0755 ./vreflink /usr/local/bin/vreflink
+/usr/local/bin/vreflink config init
 ```
 
-Guest:
+Host manual install:
 
 ```bash
-vreflink --token project-a-token /shared/A /shared/B
-vreflink -r --token project-a-token /shared/dirA /shared/dirB
-cd /shared/project
-vreflink --token project-a-token data/A data/B
+sudo install -m 0755 ./vreflinkd /usr/local/bin/vreflinkd
+/usr/local/bin/vreflinkd systemd-unit | sudo tee /etc/systemd/system/vreflinkd.service >/dev/null
+sudo install -d -m 0755 /etc/vreflinkd
+sudo cp /path/to/config.toml /etc/vreflinkd/config.toml
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now vreflinkd
 ```
 
-`vreflink` can auto-load its common guest-side settings from
-`$XDG_CONFIG_HOME/vreflink/config.toml`, which is typically
-`~/.config/vreflink/config.toml`. During migration, if `config.toml` is absent,
-`vreflink` still falls back to the legacy `~/.config/vreflink/env` file.
-Without a config file, you can still use explicit flags:
+`vreflink config init` writes the guest config template to
+`$XDG_CONFIG_HOME/vreflink/config.toml` and refuses to overwrite an existing
+file unless `--force` is used. `vreflinkd systemd-unit` prints the canonical
+systemd unit template to stdout; it does not install anything. For the daemon
+config file, copy the packaged template from the release tarball or the source
+tree's `packaging/systemd/vreflinkd.toml`, then edit it for your environment.
 
-```bash
-vreflink --token project-a-token --mount-root /shared --cid 2 --port 19090 /shared/A /shared/B
-vreflink -r --token project-a-token --mount-root /shared --cid 2 --port 19090 /shared/dirA /shared/dirB
-```
+## Quick Start
 
-Relative `SRC` and `DST` arguments are resolved from the current working
-directory, but the resolved paths must still stay within the configured guest
-mount root.
-
-## Build
-
-```bash
-go build ./...
-```
-
-## Configuration
-
-`vreflink` CLI settings can come from built-in defaults, the XDG config file,
-environment variables, or explicit flags. Precedence is:
-
-```text
-flags > environment > $XDG_CONFIG_HOME/vreflink/config.toml > defaults
-```
-
-Example guest config file:
-
-```toml
-version = 1
-mount_root = "/shared"
-host_cid = 2
-port = 19090
-timeout = "5s"
-token = "project-a-token"
-```
-
-Guest TOML keys:
-
-- `mount_root` default: `/shared`
-- `host_cid` default: `2`
-- `port` default: `19090`
-- `timeout` default: `5s`
-- `token` default: empty
-
-Compatible guest environment variables:
-
-- `VREFLINK_GUEST_MOUNT_ROOT` default: `/shared`
-- `VREFLINK_HOST_CID` default: `2`
-- `VREFLINK_VSOCK_PORT` default: `19090`
-- `VREFLINK_CLIENT_TIMEOUT` default: `5s`
-- `VREFLINK_AUTH_TOKEN` default: empty
-
-If the XDG config file exists but is malformed, `vreflink` exits with a clear
-startup error.
-
-`vreflinkd` uses a dedicated TOML config file, not runtime environment
-variables. By default it loads `/etc/vreflinkd/config.toml`, or another path
-passed with `-c`.
-
-Example daemon config file:
+Host config:
 
 ```toml
 version = 1
@@ -195,6 +158,114 @@ gid = 1001
 groups = [44]
 ```
 
+Guest config:
+
+```toml
+version = 1
+mount_root = "/shared"
+host_cid = 2
+port = 19090
+timeout = "5s"
+token = "project-a-token"
+```
+
+Start the daemon on the host:
+
+```bash
+vreflinkd -c /etc/vreflinkd/config.toml
+```
+
+Run reflinks from the guest:
+
+```bash
+vreflink /shared/A /shared/B
+vreflink -r /shared/dirA /shared/dirB
+cd /shared/project
+vreflink data/A data/B
+```
+
+Relative `SRC` and `DST` arguments are resolved from the current working
+directory, but the resolved paths must still stay within the configured guest
+mount root.
+
+## Authentication
+
+Protocol v2 uses a bearer token from the guest and a host-side token map in
+`vreflinkd`'s TOML config. The guest does not claim a `uid` or `gid`. Instead,
+each `[[tokens]]` entry maps a token to the host identity that will run the
+actual reflink work.
+
+That means:
+
+- the guest sends only the token;
+- the host chooses `uid`, `gid`, and supplementary `groups`;
+- the reflink is executed under that mapped host identity;
+- `groups` is supplementary-group data only and should not repeat the primary
+  `gid`.
+
+This is intentionally a trusted-guest design for project VMs, not a per-user
+attestation scheme inside the guest. Because the daemon config contains bearer
+tokens, recommended permissions are owner `root` and mode `0600`.
+
+## Commands
+
+Common guest commands:
+
+```bash
+vreflink SRC DST
+vreflink -r SRC DST
+vreflink --token TOKEN SRC DST
+```
+
+Common host command:
+
+```bash
+vreflinkd -c /etc/vreflinkd/config.toml
+```
+
+Success means the host executed a real reflink. There is no copy fallback.
+
+## Configuration
+
+Guest CLI settings can come from built-in defaults, the XDG config file,
+environment variables, or explicit flags. Precedence is:
+
+```text
+flags > environment > $XDG_CONFIG_HOME/vreflink/config.toml > defaults
+```
+
+During migration, if `config.toml` is absent, `vreflink` still falls back to
+the legacy `~/.config/vreflink/env` file.
+
+Guest TOML keys:
+
+- `mount_root` default: `/shared`
+- `host_cid` default: `2`
+- `port` default: `19090`
+- `timeout` default: `5s`
+- `token` default: empty
+
+Compatible guest environment variables:
+
+- `VREFLINK_GUEST_MOUNT_ROOT` default: `/shared`
+- `VREFLINK_HOST_CID` default: `2`
+- `VREFLINK_VSOCK_PORT` default: `19090`
+- `VREFLINK_CLIENT_TIMEOUT` default: `5s`
+- `VREFLINK_AUTH_TOKEN` default: empty
+
+Without a config file, you can still use explicit guest flags:
+
+```bash
+vreflink --token project-a-token --mount-root /shared --cid 2 --port 19090 /shared/A /shared/B
+vreflink -r --token project-a-token --mount-root /shared --cid 2 --port 19090 /shared/dirA /shared/dirB
+```
+
+If the guest XDG config file exists but is malformed, `vreflink` exits with a
+clear startup error.
+
+`vreflinkd` is config-file-driven. By default it loads
+`/etc/vreflinkd/config.toml`, or another path passed with `-c`.
+
 Daemon TOML keys:
 
 - `share_root` default: `/srv/labshare`
@@ -206,82 +277,9 @@ Daemon TOML keys:
 
 `vreflinkd` validates `share_root` before it starts listening. Startup fails if
 the path does not exist, is not a directory, is not writable for the probe
-files, or cannot complete a reflink probe.
-
-Each `[[tokens]]` entry maps a bearer token to the host identity that will run
-the actual reflink work. `groups` is the supplementary-group list only and
-should not repeat the primary `gid`. The daemon config now contains secret
-material, so recommended permissions are owner `root` and mode `0600`. By
-default, startup fails closed if there are no usable token entries. Set
-`allow_v1_fallback = true` only if you explicitly want unauthenticated legacy
-v1 mode. This token mapping is intentionally a trusted-guest design for project
-VMs, not a per-user attestation scheme inside the guest.
-
-## Testing
-
-```bash
-go run ./cmd/vreflink-dev test quick
-go run ./cmd/vreflink-dev test reflinkfs
-go run ./cmd/vreflink-dev test vm
-go run ./cmd/vreflink-dev test release
-```
-
-`quick` is the default contributor path. Use `reflinkfs` for real local
-reflink validation and `vm` for the full guest/host virtiofs + vsock path.
-Both privileged suites are intended to be run through the contributor runner,
-which provisions and tears down their temporary reflink-capable scratch roots
-and requires root or non-interactive `sudo`. Use `release` for
-packaging/install verification. The full testing guide lives in
-[`docs/testing.md`](docs/testing.md).
-
-## Deployment
-
-Release artifacts:
-
-- GitHub Releases will publish:
-  - `vreflink_<version>_linux_amd64.tar.gz`
-  - `vreflink_<version>_amd64.deb`
-  - `vreflink_<version>_sha256sums.txt`
-- The Debian package is directly installable with `dpkg -i`; no PPA or package
-  registry is required.
-
-Debian/Ubuntu:
-
-```bash
-sudo dpkg -i ./vreflink_<version>_amd64.deb
-```
-
-The package installs:
-
-- `/usr/bin/vreflink`
-- `/usr/bin/vreflinkd`
-- `/lib/systemd/system/vreflinkd.service`
-- `/etc/vreflinkd/config.toml`
-- `/usr/share/vreflink/config.toml`
-
-The service is installed but disabled by default. Operators edit
-`/etc/vreflinkd/config.toml` with the real `share_root` and token mappings
-before enabling protocol v2 token authentication. Legacy v1 fallback is
-disabled by default.
-
-Manual binary install:
-
-```bash
-sudo ./vreflink install
-./vreflink config init
-
-sudo ./vreflinkd install
-./vreflinkd systemd-unit
-```
-
-`vreflink config init` writes the guest config template to
-`$XDG_CONFIG_HOME/vreflink/config.toml` and refuses to overwrite an existing
-file unless `--force` is used.
-
-`vreflinkd systemd-unit` prints the canonical systemd unit to stdout so it can
-be reviewed or customized before installation.
-
-Local artifact build details live in [`docs/releasing.md`](docs/releasing.md).
+files, or cannot complete a reflink probe. By default, startup also fails
+closed if there are no usable token entries. Set `allow_v1_fallback = true`
+only if you explicitly want unauthenticated legacy v1 mode.
 
 ## Failure Modes
 
@@ -297,3 +295,10 @@ Local artifact build details live in [`docs/releasing.md`](docs/releasing.md).
 - There is no fallback copy path. If the host filesystem does not support
   reflinks for the requested source and destination, the request fails with
   `EOPNOTSUPP`.
+
+## Development
+
+Contributor workflows are documented separately:
+
+- testing: [`docs/testing.md`](docs/testing.md)
+- packaging and release flow: [`docs/releasing.md`](docs/releasing.md)

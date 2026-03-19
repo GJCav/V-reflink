@@ -29,59 +29,12 @@ func TestSystemdUnitCommandPrintsTemplate(t *testing.T) {
 	}
 }
 
-func TestInstallCopiesExecutableAndTemplates(t *testing.T) {
-	executablePath, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
-	}
-
-	root := t.TempDir()
-	binDir := filepath.Join(root, "bin")
-	systemdDir := filepath.Join(root, "systemd")
-	configPath := filepath.Join(root, "config", "vreflinkd.toml")
-
+func TestRootCommandDoesNotExposeInstallSubcommand(t *testing.T) {
 	cmd := newRootCmd()
-	output := &bytes.Buffer{}
-	cmd.SetOut(output)
-	cmd.SetErr(output)
-	cmd.SetArgs([]string{
-		"install",
-		"--bin-dir", binDir,
-		"--systemd-dir", systemdDir,
-		"--config-path", configPath,
-	})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	installedBinary := filepath.Join(binDir, "vreflinkd")
-	gotBinary, err := os.ReadFile(installedBinary)
-	if err != nil {
-		t.Fatalf("os.ReadFile() error = %v", err)
-	}
-	wantBinary, err := os.ReadFile(executablePath)
-	if err != nil {
-		t.Fatalf("os.ReadFile() error = %v", err)
-	}
-	if !bytes.Equal(gotBinary, wantBinary) {
-		t.Fatal("installed binary does not match current executable")
-	}
-
-	gotService, err := os.ReadFile(filepath.Join(systemdDir, "vreflinkd.service"))
-	if err != nil {
-		t.Fatalf("os.ReadFile() error = %v", err)
-	}
-	if string(gotService) != string(pkgassets.SystemdUnitTemplate()) {
-		t.Fatal("installed systemd unit does not match canonical template")
-	}
-
-	gotConfig, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("os.ReadFile() error = %v", err)
-	}
-	if string(gotConfig) != string(pkgassets.DaemonConfigTemplate()) {
-		t.Fatal("installed config file does not match canonical template")
+	for _, sub := range cmd.Commands() {
+		if sub.Name() == "install" {
+			t.Fatal("install subcommand unexpectedly present")
+		}
 	}
 }
 

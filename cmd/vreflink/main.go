@@ -103,7 +103,6 @@ func newRootCmdWithDependencies(
 	cmd.Flags().DurationVar(&timeout, "timeout", timeout, "request timeout")
 	cmd.Flags().StringVar(&authToken, "token", authToken, "authentication token for protocol v2 requests")
 
-	cmd.AddCommand(newInstallCmd())
 	cmd.AddCommand(newConfigCmd())
 
 	return cmd
@@ -163,35 +162,6 @@ func resolveRuntimeConfig(cmd *cobra.Command, loadConfig func() (config.CLI, err
 	}
 
 	return cfg, nil
-}
-
-func newInstallCmd() *cobra.Command {
-	binDir := "/usr/bin"
-
-	cmd := &cobra.Command{
-		Use:           "install",
-		Short:         "Install the current guest binary",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Args:          cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			executablePath, err := os.Executable()
-			if err != nil {
-				return err
-			}
-
-			installedPath, err := install.InstallBinary(executablePath, binDir, install.GuestBinaryName)
-			if err != nil {
-				return err
-			}
-
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed guest binary to %s\n", installedPath)
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&binDir, "bin-dir", binDir, "directory to install vreflink into")
-	return cmd
 }
 
 func newConfigCmd() *cobra.Command {

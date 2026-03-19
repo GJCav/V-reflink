@@ -14,7 +14,6 @@ import (
 
 	"github.com/GJCav/V-reflink/internal/auth"
 	"github.com/GJCav/V-reflink/internal/config"
-	"github.com/GJCav/V-reflink/internal/install"
 	"github.com/GJCav/V-reflink/internal/logutil"
 	"github.com/GJCav/V-reflink/internal/protocol"
 	"github.com/GJCav/V-reflink/internal/server"
@@ -60,7 +59,6 @@ func newRootCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&configPath, "config", "c", configPath, "path to the daemon TOML config file")
 
-	cmd.AddCommand(newInstallCmd())
 	cmd.AddCommand(newSystemdUnitCmd())
 	cmd.AddCommand(newWorkerCmd())
 
@@ -185,51 +183,6 @@ func newWorkerCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&shareRoot, "share-root", "", "host share root")
-	return cmd
-}
-
-func newInstallCmd() *cobra.Command {
-	binDir := "/usr/bin"
-	systemdDir := "/etc/systemd/system"
-	configPath := config.DefaultDaemonConfigPath()
-
-	cmd := &cobra.Command{
-		Use:           "install",
-		Short:         "Install the current host binary and templates",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Args:          cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			executablePath, err := os.Executable()
-			if err != nil {
-				return err
-			}
-
-			result, err := install.InstallHost(
-				executablePath,
-				binDir,
-				systemdDir,
-				configPath,
-				pkgassets.SystemdUnitTemplate(),
-				pkgassets.DaemonConfigTemplate(),
-			)
-			if err != nil {
-				return err
-			}
-
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed host binary to %s\n", result.BinaryPath)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed systemd unit to %s\n", result.SystemdPath)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed config file to %s\n", result.ConfigPath)
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "next steps:")
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  sudo systemctl daemon-reload")
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  sudo systemctl enable --now vreflinkd")
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&binDir, "bin-dir", binDir, "directory to install vreflinkd into")
-	cmd.Flags().StringVar(&systemdDir, "systemd-dir", systemdDir, "directory to install the systemd unit into")
-	cmd.Flags().StringVar(&configPath, "config-path", configPath, "path to install the daemon TOML config into")
 	return cmd
 }
 
