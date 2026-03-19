@@ -1,0 +1,17 @@
+$ vreflink config init
+wrote /home/user/.config/vreflink/config.toml
+
+$ cat /home/user/.config/vreflink/config.toml
+version = 1
+mount_root = "/shared"
+host_cid = 2
+port = 19090
+timeout = "5s"
+# Optional protocol v2 authentication token
+# token = ""
+
+$ vreflink config init   # second run
+vreflink: config file already exists at /home/user/.config/vreflink/config.toml (use --force to overwrite)
+
+$ vreflink config init --force
+wrote /home/user/.config/vreflink/config.toml

@@ -1,0 +1,35 @@
+=== OS ===
+Distributor ID:	Ubuntu
+Description:	Ubuntu 24.04.3 LTS
+Release:	24.04
+Codename:	noble
+
+=== Kernel ===
+Linux runnervm46oaq 6.14.0-1017-azure #17~24.04.1-Ubuntu SMP Mon Dec  1 20:10:50 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+=== Go ===
+go version go1.25.0 linux/amd64
+
+=== Filesystem ===
+Filesystem     Type  Size  Used Avail Use% Mounted on
+/dev/root      ext4  145G   56G   89G  39% /
+
+=== dpkg ===
+Debian 'dpkg' package management program version 1.22.6 (amd64).
+This is free software; see the GNU General Public License version 2 or
+later for copying conditions. There is NO warranty.
+
+=== mkfs.btrfs ===
+mkfs.btrfs, part of btrfs-progs v6.6.3
+
+=== Available tools ===
+/usr/bin/dpkg
+dpkg: found
+/usr/bin/dpkg-deb
+dpkg-deb: found
+/usr/sbin/mkfs.btrfs
+mkfs.btrfs: found
+qemu-system-x86_64: NOT FOUND
+virtiofsd: NOT FOUND
+/usr/bin/ssh
+ssh: found

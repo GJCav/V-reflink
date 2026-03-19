@@ -1,0 +1,29 @@
+# dpkg --remove: config preserved; service stopped/disabled
+
+$ sudo dpkg -r vreflink
+(Reading database ... 15 files and directories currently installed.)
+Removing vreflink (0.1.2) ...
+[prerm: deb-systemd-invoke stop vreflinkd.service]
+[prerm: deb-systemd-helper disable vreflinkd.service]
+[postrm: systemctl --system daemon-reload]
+[postrm: systemctl --system reset-failed vreflinkd.service]
+
+$ cat /etc/vreflinkd/config.toml   # config preserved
+version = 1
+share_root = "/srv/labshare"
+...
+# admin-edited config   <-- admin edit is preserved
+
+$ ls /usr/bin/vreflink
+ls: cannot access '/usr/bin/vreflink': No such file or directory   # binary removed
+
+# dpkg --purge: config removed
+
+$ sudo dpkg -P vreflink
+Purging configuration files for vreflink (0.1.2) ...
+[postrm: deb-systemd-helper purge vreflinkd.service]
+[postrm: systemctl --system daemon-reload]
+[postrm: systemctl --system reset-failed vreflinkd.service]
+
+$ cat /etc/vreflinkd/config.toml
+cat: /etc/vreflinkd/config.toml: No such file or directory   # config removed on purge

@@ -1,0 +1,16 @@
+$ dpkg-deb -c dist/vreflink_0.1.2_amd64.deb
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./etc/
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./etc/vreflinkd/
+-rw------- root/root       226 2026-03-19 15:15 ./etc/vreflinkd/config.toml
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./lib/
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./lib/systemd/
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./lib/systemd/system/
+-rw-r--r-- root/root       249 2026-03-19 15:15 ./lib/systemd/system/vreflinkd.service
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./usr/
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./usr/bin/
+-rwxr-xr-x root/root   4776113 2026-03-19 15:15 ./usr/bin/vreflink
+-rwxr-xr-x root/root   5297533 2026-03-19 15:15 ./usr/bin/vreflinkd
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./usr/share/
+drwxr-xr-x root/root         0 2026-03-19 15:15 ./usr/share/vreflink/
+-rw-r--r-- root/root       133 2026-03-19 15:15 ./usr/share/vreflink/config.toml

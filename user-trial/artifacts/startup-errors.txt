@@ -1,0 +1,13 @@
+# Daemon startup error cases
+
+$ vreflinkd -c /nonexistent/path/config.toml
+vreflinkd: read daemon config /nonexistent/path/config.toml: open /nonexistent/path/config.toml: no such file or directory
+
+$ vreflinkd -c /tmp/bad-share.toml   # share_root="/nonexistent/share/root"
+vreflinkd: share root "/nonexistent/share/root" does not exist
+
+$ vreflinkd -c /tmp/ext4-config.toml   # share_root="/tmp" (ext4, no reflink)
+vreflinkd: share root "/tmp" does not support reflink: reflink is not supported for this source and destination
+
+$ vreflinkd -c /tmp/btrfs-config.toml   # share_root=/tmp/btrfs-mnt (btrfs)
+time=2026-03-19T15:18:41.994Z level=INFO msg=listening share_root=/tmp/btrfs-mnt port=29090

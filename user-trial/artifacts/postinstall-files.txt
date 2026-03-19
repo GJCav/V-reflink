@@ -1,0 +1,41 @@
+$ find /usr -name "vreflink*" -o -name "vreflinkd*" | sort
+/usr/bin/vreflink
+/usr/bin/vreflinkd
+/usr/share/vreflink/config.toml
+
+$ ls -la /usr/bin/vreflink /usr/bin/vreflinkd
+-rwxr-xr-x 1 root root 4776113 Mar 19 2026 /usr/bin/vreflink
+-rwxr-xr-x 1 root root 5297533 Mar 19 2026 /usr/bin/vreflinkd
+
+$ ls -la /lib/systemd/system/vreflinkd.service
+-rw-r--r-- 1 root root 249 Mar 19 2026 /lib/systemd/system/vreflinkd.service
+
+$ cat /etc/vreflinkd/config.toml
+version = 1
+share_root = "/srv/labshare"
+port = 19090
+read_timeout = "5s"
+write_timeout = "5s"
+log_level = "info"
+allow_v1_fallback = false
+
+[[tokens]]
+name = "project-a"
+token = "replace-me"
+uid = 1000
+gid = 1000
+groups = []
+
+$ cat /usr/share/vreflink/config.toml
+version = 1
+mount_root = "/shared"
+host_cid = 2
+port = 19090
+timeout = "5s"
+# Optional protocol v2 authentication token
+# token = ""
+
+$ systemctl status vreflinkd
+○ vreflinkd.service - vreflink host daemon
+     Loaded: loaded (/lib/systemd/system/vreflinkd.service; disabled; preset: enabled)
+     Active: inactive (dead)

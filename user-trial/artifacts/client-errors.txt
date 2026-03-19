@@ -1,0 +1,17 @@
+# Guest CLI error cases
+
+$ vreflink           # no args
+vreflink: accepts 2 arg(s), received 0
+
+$ vreflink /etc/passwd /tmp/out   # path outside mount root
+vreflink: path must stay within the guest mount root
+
+$ vreflink --mount-root /shared some/relative/src some/relative/dst   # relative paths resolved but outside root
+vreflink: path must stay within the guest mount root
+
+$ vreflink /shared/a /shared/b   # no daemon running (connection timeout shown after timeout)
+vreflink: dial vsock host(2):19090: connect: connection timed out
+
+# Bad config file error
+$ vreflink /shared/a /shared/b   # with malformed config.toml
+vreflink: load CLI config: parse /home/user/.config/vreflink/config.toml: toml: expected character =
