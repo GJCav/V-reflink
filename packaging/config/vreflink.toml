@@ -1,0 +1,7 @@
+version = 1
+mount_root = "/shared"
+host_cid = 2
+port = 19090
+timeout = "5s"
+# Optional protocol v2 authentication token
+# token = ""

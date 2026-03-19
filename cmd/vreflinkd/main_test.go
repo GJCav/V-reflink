@@ -38,7 +38,7 @@ func TestInstallCopiesExecutableAndTemplates(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
 	systemdDir := filepath.Join(root, "systemd")
-	defaultsPath := filepath.Join(root, "defaults", "vreflinkd")
+	configPath := filepath.Join(root, "config", "vreflinkd.toml")
 
 	cmd := newRootCmd()
 	output := &bytes.Buffer{}
@@ -48,7 +48,7 @@ func TestInstallCopiesExecutableAndTemplates(t *testing.T) {
 		"install",
 		"--bin-dir", binDir,
 		"--systemd-dir", systemdDir,
-		"--defaults-path", defaultsPath,
+		"--config-path", configPath,
 	})
 
 	if err := cmd.Execute(); err != nil {
@@ -76,20 +76,25 @@ func TestInstallCopiesExecutableAndTemplates(t *testing.T) {
 		t.Fatal("installed systemd unit does not match canonical template")
 	}
 
-	gotDefaults, err := os.ReadFile(defaultsPath)
+	gotConfig, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("os.ReadFile() error = %v", err)
 	}
-	if string(gotDefaults) != string(pkgassets.DaemonDefaultsTemplate()) {
-		t.Fatal("installed defaults file does not match canonical template")
+	if string(gotConfig) != string(pkgassets.DaemonConfigTemplate()) {
+		t.Fatal("installed config file does not match canonical template")
 	}
 }
 
 func TestRootCommandRejectsInvalidShareRootBeforeListen(t *testing.T) {
 	missingRoot := filepath.Join(t.TempDir(), "missing")
+	configPath := writeDaemonConfig(t, `
+version = 1
+share_root = "`+missingRoot+`"
+allow_v1_fallback = true
+`)
 
 	cmd := newRootCmd()
-	cmd.SetArgs([]string{"--share-root", missingRoot})
+	cmd.SetArgs([]string{"--config", configPath})
 
 	err := cmd.Execute()
 	if err == nil {
@@ -101,44 +106,7 @@ func TestRootCommandRejectsInvalidShareRootBeforeListen(t *testing.T) {
 	}
 }
 
-func TestRootCommandRejectsMalformedTokenMapBeforeListen(t *testing.T) {
-	originalValidate := validateShareRoot
-	originalListen := listenVsock
-	t.Cleanup(func() {
-		validateShareRoot = originalValidate
-		listenVsock = originalListen
-	})
-	shareRoot := t.TempDir()
-
-	validateShareRoot = func(string, service.Reflinker) error {
-		return nil
-	}
-	listenVsock = func(uint32) (net.Listener, error) {
-		return nil, errors.New("listen should not be reached")
-	}
-
-	tokenMapPath := filepath.Join(t.TempDir(), "tokens.yaml")
-	if err := os.WriteFile(tokenMapPath, []byte("version: [not-valid"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-
-	cmd := newRootCmd()
-	cmd.SetArgs([]string{
-		"--share-root", shareRoot,
-		"--token-map-path", tokenMapPath,
-	})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Execute() unexpectedly succeeded")
-	}
-
-	if !strings.Contains(err.Error(), "parse token map") {
-		t.Fatalf("Execute() error = %v, want token-map parse failure", err)
-	}
-}
-
-func TestRootCommandRejectsMissingTokenMapByDefault(t *testing.T) {
+func TestRootCommandRejectsMalformedConfigBeforeListen(t *testing.T) {
 	originalValidate := validateShareRoot
 	originalListen := listenVsock
 	t.Cleanup(func() {
@@ -153,23 +121,24 @@ func TestRootCommandRejectsMissingTokenMapByDefault(t *testing.T) {
 		return nil, errors.New("listen should not be reached")
 	}
 
+	configPath := writeDaemonConfig(t, `
+version = [not-valid
+`)
+
 	cmd := newRootCmd()
-	cmd.SetArgs([]string{
-		"--share-root", t.TempDir(),
-		"--token-map-path", filepath.Join(t.TempDir(), "missing.yaml"),
-	})
+	cmd.SetArgs([]string{"--config", configPath})
 
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("Execute() unexpectedly succeeded")
 	}
 
-	if !strings.Contains(err.Error(), "is required unless VREFLINK_ALLOW_V1_FALLBACK=true") {
-		t.Fatalf("Execute() error = %v, want fail-closed token-map error", err)
+	if !strings.Contains(err.Error(), "parse "+configPath) {
+		t.Fatalf("Execute() error = %v, want config parse failure", err)
 	}
 }
 
-func TestRootCommandAllowsMissingTokenMapWhenFallbackEnabled(t *testing.T) {
+func TestRootCommandRejectsMissingTokenConfigByDefault(t *testing.T) {
 	originalValidate := validateShareRoot
 	originalListen := listenVsock
 	t.Cleanup(func() {
@@ -177,7 +146,38 @@ func TestRootCommandAllowsMissingTokenMapWhenFallbackEnabled(t *testing.T) {
 		listenVsock = originalListen
 	})
 
-	t.Setenv("VREFLINK_ALLOW_V1_FALLBACK", "true")
+	validateShareRoot = func(string, service.Reflinker) error {
+		return nil
+	}
+	listenVsock = func(uint32) (net.Listener, error) {
+		return nil, errors.New("listen should not be reached")
+	}
+
+	configPath := writeDaemonConfig(t, `
+version = 1
+share_root = "/srv/labshare"
+`)
+
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{"--config", configPath})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "token configuration is required unless allow_v1_fallback=true") {
+		t.Fatalf("Execute() error = %v, want fail-closed token-config error", err)
+	}
+}
+
+func TestRootCommandAllowsMissingTokenConfigWhenFallbackEnabled(t *testing.T) {
+	originalValidate := validateShareRoot
+	originalListen := listenVsock
+	t.Cleanup(func() {
+		validateShareRoot = originalValidate
+		listenVsock = originalListen
+	})
 
 	validateShareRoot = func(string, service.Reflinker) error {
 		return nil
@@ -188,14 +188,41 @@ func TestRootCommandAllowsMissingTokenMapWhenFallbackEnabled(t *testing.T) {
 		return nil, wantErr
 	}
 
+	configPath := writeDaemonConfig(t, `
+version = 1
+share_root = "/srv/labshare"
+allow_v1_fallback = true
+`)
+
 	cmd := newRootCmd()
-	cmd.SetArgs([]string{
-		"--share-root", t.TempDir(),
-		"--token-map-path", filepath.Join(t.TempDir(), "missing.yaml"),
-	})
+	cmd.SetArgs([]string{"--config", configPath})
 
 	err := cmd.Execute()
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Execute() error = %v, want %v", err, wantErr)
 	}
+}
+
+func TestRootCommandRejectsLegacyRuntimeFlags(t *testing.T) {
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{"--share-root", "/srv/labshare"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("Execute() error = %v, want unknown flag", err)
+	}
+}
+
+func writeDaemonConfig(t *testing.T, contents string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	return path
 }

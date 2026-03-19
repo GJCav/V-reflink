@@ -89,11 +89,11 @@ func Build(ctx context.Context, opts Options) (Artifacts, error) {
 		buildRoot,
 		filepath.Join(tarRoot, "usr", "bin"),
 		filepath.Join(tarRoot, "lib", "systemd", "system"),
-		filepath.Join(tarRoot, "etc", "default"),
+		filepath.Join(tarRoot, "etc", "vreflinkd"),
 		filepath.Join(tarRoot, "share", "vreflink"),
 		filepath.Join(debRoot, "usr", "bin"),
 		filepath.Join(debRoot, "lib", "systemd", "system"),
-		filepath.Join(debRoot, "etc", "default"),
+		filepath.Join(debRoot, "etc", "vreflinkd"),
 		debControlDir,
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -118,10 +118,10 @@ func Build(ctx context.Context, opts Options) (Artifacts, error) {
 	if err := writeFile(filepath.Join(tarRoot, "lib", "systemd", "system", "vreflinkd.service"), pkgassets.SystemdUnitTemplate(), 0o644); err != nil {
 		return Artifacts{}, err
 	}
-	if err := writeFile(filepath.Join(tarRoot, "etc", "default", "vreflinkd"), pkgassets.DaemonDefaultsTemplate(), 0o644); err != nil {
+	if err := writeFile(filepath.Join(tarRoot, "etc", "vreflinkd", "config.toml"), pkgassets.DaemonConfigTemplate(), 0o600); err != nil {
 		return Artifacts{}, err
 	}
-	if err := writeFile(filepath.Join(tarRoot, "share", "vreflink", "vreflink.env"), pkgassets.GuestConfigTemplate(), 0o644); err != nil {
+	if err := writeFile(filepath.Join(tarRoot, "share", "vreflink", "config.toml"), pkgassets.GuestConfigTemplate(), 0o644); err != nil {
 		return Artifacts{}, err
 	}
 	if err := copyFile(filepath.Join(repoRoot, "README.md"), filepath.Join(tarRoot, "README.md"), 0o644); err != nil {
@@ -140,7 +140,7 @@ func Build(ctx context.Context, opts Options) (Artifacts, error) {
 	if err := writeFile(filepath.Join(debRoot, "lib", "systemd", "system", "vreflinkd.service"), pkgassets.SystemdUnitTemplate(), 0o644); err != nil {
 		return Artifacts{}, err
 	}
-	if err := writeFile(filepath.Join(debRoot, "etc", "default", "vreflinkd"), pkgassets.DaemonDefaultsTemplate(), 0o644); err != nil {
+	if err := writeFile(filepath.Join(debRoot, "etc", "vreflinkd", "config.toml"), pkgassets.DaemonConfigTemplate(), 0o600); err != nil {
 		return Artifacts{}, err
 	}
 

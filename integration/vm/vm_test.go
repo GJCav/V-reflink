@@ -189,12 +189,12 @@ disable_root: true
 	}
 
 	authToken := "vreflink-vm-token-" + instanceID
-	tokenMap := filepath.Join(runRoot, "tokens.yaml")
 	groupsCSV := joinUint32CSV(hostGroups)
-	tokenMapBody := fmt.Sprintf("version: 1\ntokens:\n  - name: vm-integration\n    token: %s\n    uid: %d\n    gid: %d\n    groups: [%s]\n", authToken, hostUID, hostGID, groupsCSV)
-	if err := os.WriteFile(tokenMap, []byte(tokenMapBody), 0o600); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
+	mainConfig := writeVMDaemonConfig(t, runRoot, "main-config.toml", shareRoot, cfg.HostPort, false, authToken, uint32(hostUID), uint32(hostGID), groupsCSV)
+	fallbackConfig := writeVMDaemonConfig(t, runRoot, "fallback-config.toml", shareRoot, cfg.FallbackPort, true, "", uint32(hostUID), uint32(hostGID), "")
+	missingTokenConfig := writeVMDaemonConfig(t, runRoot, "missing-token-config.toml", shareRoot, cfg.MissingMapPort, false, "", uint32(hostUID), uint32(hostGID), "")
+	invalidShareRoot := filepath.Join(runRoot, "missing-share")
+	invalidConfig := writeVMDaemonConfig(t, runRoot, "invalid-config.toml", invalidShareRoot, cfg.InvalidPort, false, authToken, uint32(hostUID), uint32(hostGID), groupsCSV)
 
 	for _, path := range []string{
 		filepath.Join(shareRoot, "data", "B"),
@@ -239,8 +239,7 @@ disable_root: true
 		t.Fatalf("chmod group parent error = %v", err)
 	}
 
-	invalidShareRoot := filepath.Join(runRoot, "missing-share")
-	invalidOutput, timedOut, err := runTimedCommand(5*time.Second, repoRoot, nil, filepath.Join(buildRoot, "vreflinkd"), "--share-root", invalidShareRoot, "--token-map-path", tokenMap, "--port", strconv.FormatUint(uint64(cfg.InvalidPort), 10))
+	invalidOutput, timedOut, err := runTimedCommand(5*time.Second, repoRoot, nil, filepath.Join(buildRoot, "vreflinkd"), "--config", invalidConfig)
 	if err == nil {
 		t.Fatalf("daemon unexpectedly started with an invalid share root")
 	}
@@ -251,28 +250,27 @@ disable_root: true
 		t.Fatalf("invalid share root error did not mention the missing path:\n%s", invalidOutput)
 	}
 
-	missingTokenOutput, timedOut, err := runTimedCommand(5*time.Second, repoRoot, nil, filepath.Join(buildRoot, "vreflinkd"), "--share-root", shareRoot, "--token-map-path", filepath.Join(runRoot, "missing-tokens.yaml"), "--port", strconv.FormatUint(uint64(cfg.MissingMapPort), 10))
+	missingTokenOutput, timedOut, err := runTimedCommand(5*time.Second, repoRoot, nil, filepath.Join(buildRoot, "vreflinkd"), "--config", missingTokenConfig)
 	if err == nil {
 		t.Fatalf("daemon unexpectedly started without a token map in fail-closed mode")
 	}
 	if timedOut {
 		t.Fatalf("daemon did not fail fast for a missing token map:\n%s", missingTokenOutput)
 	}
-	if !strings.Contains(missingTokenOutput, "VREFLINK_ALLOW_V1_FALLBACK=true") {
+	if !strings.Contains(missingTokenOutput, "allow_v1_fallback=true") {
 		t.Fatalf("missing token map error did not explain the explicit fallback override:\n%s", missingTokenOutput)
 	}
 
 	mainDaemonLog := filepath.Join(runRoot, "vreflinkd.log")
 	fallbackDaemonLog := filepath.Join(runRoot, "vreflinkd-fallback.log")
-	mainDaemon, err := startLoggedProcess(repoRoot, nil, mainDaemonLog, filepath.Join(buildRoot, "vreflinkd"), "--share-root", shareRoot, "--token-map-path", tokenMap, "--port", strconv.FormatUint(uint64(cfg.HostPort), 10))
+	mainDaemon, err := startLoggedProcess(repoRoot, nil, mainDaemonLog, filepath.Join(buildRoot, "vreflinkd"), "--config", mainConfig)
 	if err != nil {
 		t.Fatalf("start main daemon error = %v", err)
 	}
 	t.Cleanup(func() {
 		stopProcess(mainDaemon)
 	})
-	fallbackEnv := append(os.Environ(), "VREFLINK_ALLOW_V1_FALLBACK=true")
-	fallbackDaemon, err := startLoggedProcess(repoRoot, fallbackEnv, fallbackDaemonLog, filepath.Join(buildRoot, "vreflinkd"), "--share-root", shareRoot, "--token-map-path", filepath.Join(runRoot, "missing-tokens.yaml"), "--port", strconv.FormatUint(uint64(cfg.FallbackPort), 10))
+	fallbackDaemon, err := startLoggedProcess(repoRoot, nil, fallbackDaemonLog, filepath.Join(buildRoot, "vreflinkd"), "--config", fallbackConfig)
 	if err != nil {
 		t.Fatalf("start fallback daemon error = %v", err)
 	}
@@ -855,6 +853,39 @@ func joinUint32CSV(values []uint32) string {
 		parts = append(parts, strconv.FormatUint(uint64(value), 10))
 	}
 	return strings.Join(parts, ",")
+}
+
+func writeVMDaemonConfig(t *testing.T, runRoot, name, shareRoot string, port uint32, allowV1Fallback bool, token string, uid, gid uint32, groupsCSV string) string {
+	t.Helper()
+
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "version = 1\n")
+	fmt.Fprintf(&builder, "share_root = %q\n", shareRoot)
+	fmt.Fprintf(&builder, "port = %d\n", port)
+	fmt.Fprintf(&builder, "read_timeout = %q\n", "5s")
+	fmt.Fprintf(&builder, "write_timeout = %q\n", "5s")
+	fmt.Fprintf(&builder, "log_level = %q\n", "info")
+	fmt.Fprintf(&builder, "allow_v1_fallback = %t\n", allowV1Fallback)
+
+	if token != "" {
+		fmt.Fprintf(&builder, "\n[[tokens]]\n")
+		fmt.Fprintf(&builder, "name = %q\n", "vm-integration")
+		fmt.Fprintf(&builder, "token = %q\n", token)
+		fmt.Fprintf(&builder, "uid = %d\n", uid)
+		fmt.Fprintf(&builder, "gid = %d\n", gid)
+		if groupsCSV == "" {
+			fmt.Fprintf(&builder, "groups = []\n")
+		} else {
+			fmt.Fprintf(&builder, "groups = [%s]\n", groupsCSV)
+		}
+	}
+
+	path := filepath.Join(runRoot, name)
+	if err := os.WriteFile(path, []byte(builder.String()), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	return path
 }
 
 func assertSameFileContents(t *testing.T, left, right string) {

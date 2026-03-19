@@ -13,9 +13,9 @@ const (
 )
 
 type HostResult struct {
-	BinaryPath   string
-	SystemdPath  string
-	DefaultsPath string
+	BinaryPath  string
+	SystemdPath string
+	ConfigPath  string
 }
 
 func InstallBinary(executablePath, binDir, binaryName string) (string, error) {
@@ -34,12 +34,12 @@ func InstallBinary(executablePath, binDir, binaryName string) (string, error) {
 	return dstPath, nil
 }
 
-func InstallHost(executablePath, binDir, systemdDir, defaultsPath string, systemdUnit, daemonDefaults []byte) (HostResult, error) {
+func InstallHost(executablePath, binDir, systemdDir, configPath string, systemdUnit, daemonConfig []byte) (HostResult, error) {
 	if systemdDir == "" {
 		return HostResult{}, fmt.Errorf("systemd directory is required")
 	}
-	if defaultsPath == "" {
-		return HostResult{}, fmt.Errorf("defaults path is required")
+	if configPath == "" {
+		return HostResult{}, fmt.Errorf("config path is required")
 	}
 
 	binaryPath, err := InstallBinary(executablePath, binDir, HostBinaryName)
@@ -51,14 +51,14 @@ func InstallHost(executablePath, binDir, systemdDir, defaultsPath string, system
 	if err := WriteTemplate(systemdPath, systemdUnit, 0o644, true); err != nil {
 		return HostResult{}, err
 	}
-	if err := WriteTemplate(defaultsPath, daemonDefaults, 0o644, true); err != nil {
+	if err := WriteTemplate(configPath, daemonConfig, 0o600, true); err != nil {
 		return HostResult{}, err
 	}
 
 	return HostResult{
-		BinaryPath:   binaryPath,
-		SystemdPath:  systemdPath,
-		DefaultsPath: defaultsPath,
+		BinaryPath:  binaryPath,
+		SystemdPath: systemdPath,
+		ConfigPath:  configPath,
 	}, nil
 }
 

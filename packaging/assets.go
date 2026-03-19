@@ -3,7 +3,7 @@ package packaging
 import _ "embed"
 
 var (
-	//go:embed config/vreflink.env
+	//go:embed config/vreflink.toml
 	guestConfigTemplate string
 
 	//go:embed deb/control.template
@@ -12,8 +12,8 @@ var (
 	//go:embed systemd/vreflinkd.service
 	systemdUnitTemplate string
 
-	//go:embed systemd/vreflinkd.env
-	daemonDefaultsTemplate string
+	//go:embed systemd/vreflinkd.toml
+	daemonConfigTemplate string
 )
 
 func GuestConfigTemplate() []byte {
@@ -28,6 +28,6 @@ func SystemdUnitTemplate() []byte {
 	return []byte(systemdUnitTemplate)
 }
 
-func DaemonDefaultsTemplate() []byte {
-	return []byte(daemonDefaultsTemplate)
+func DaemonConfigTemplate() []byte {
+	return []byte(daemonConfigTemplate)
 }

@@ -105,11 +105,11 @@ The VM suite expects:
 The VM runner will prepare the Ubuntu Minimal image on demand, build the test
 binaries, create a temporary loopback btrfs share root unless
 `VREFLINK_VM_SHARE_ROOT` is already set, boot the guest, mount virtiofs, run
-`vreflink`, generate a temporary token map that points at the current host
-user's `uid`, `gid`, and supplementary groups, and verify post-write
-copy-on-write plus token-authenticated ownership behavior. It also checks the
-default fail-closed startup path when the token map is missing and the explicit
-legacy fallback mode.
+`vreflink`, generate a temporary daemon TOML config that maps a bearer token to
+the current host user's `uid`, `gid`, and supplementary groups, and verify
+post-write copy-on-write plus token-authenticated ownership behavior. It also
+checks the default fail-closed startup path when token configuration is missing
+and the explicit legacy fallback mode.
 
 The VM suite also expects the current host user to have at least one
 supplementary group so it can cover the group-based access case.

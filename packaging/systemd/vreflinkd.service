@@ -5,8 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/default/vreflinkd
-ExecStart=/usr/bin/vreflinkd --share-root ${VREFLINK_SHARE_ROOT} --port ${VREFLINK_VSOCK_PORT} --read-timeout ${VREFLINK_READ_TIMEOUT} --write-timeout ${VREFLINK_WRITE_TIMEOUT} --token-map-path ${VREFLINK_TOKEN_MAP_PATH}
+ExecStart=/usr/bin/vreflinkd -c /etc/vreflinkd/config.toml
 Restart=on-failure
 RestartSec=2s
 

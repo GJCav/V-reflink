@@ -100,7 +100,7 @@ Success means the host executed a real reflink. There is no copy fallback.
 Host:
 
 ```bash
-vreflinkd --share-root /srv/labshare --token-map-path /etc/vreflinkd/tokens.yaml --port 19090
+vreflinkd -c /etc/vreflinkd/config.toml
 ```
 
 Guest:
@@ -113,8 +113,10 @@ vreflink --token project-a-token data/A data/B
 ```
 
 `vreflink` can auto-load its common guest-side settings from
-`$XDG_CONFIG_HOME/vreflink/env`, which is typically `~/.config/vreflink/env`.
-Without that file, you can still use explicit flags:
+`$XDG_CONFIG_HOME/vreflink/config.toml`, which is typically
+`~/.config/vreflink/config.toml`. During migration, if `config.toml` is absent,
+`vreflink` still falls back to the legacy `~/.config/vreflink/env` file.
+Without a config file, you can still use explicit flags:
 
 ```bash
 vreflink --token project-a-token --mount-root /shared --cid 2 --port 19090 /shared/A /shared/B
@@ -137,20 +139,29 @@ go build ./...
 environment variables, or explicit flags. Precedence is:
 
 ```text
-flags > environment > $XDG_CONFIG_HOME/vreflink/env > defaults
+flags > environment > $XDG_CONFIG_HOME/vreflink/config.toml > defaults
 ```
 
 Example guest config file:
 
-```bash
-# ~/.config/vreflink/env
-VREFLINK_GUEST_MOUNT_ROOT=/shared
-VREFLINK_HOST_CID=2
-VREFLINK_VSOCK_PORT=19090
-VREFLINK_AUTH_TOKEN=project-a-token
+```toml
+version = 1
+mount_root = "/shared"
+host_cid = 2
+port = 19090
+timeout = "5s"
+token = "project-a-token"
 ```
 
-CLI keys:
+Guest TOML keys:
+
+- `mount_root` default: `/shared`
+- `host_cid` default: `2`
+- `port` default: `19090`
+- `timeout` default: `5s`
+- `token` default: empty
+
+Compatible guest environment variables:
 
 - `VREFLINK_GUEST_MOUNT_ROOT` default: `/shared`
 - `VREFLINK_HOST_CID` default: `2`
@@ -161,46 +172,50 @@ CLI keys:
 If the XDG config file exists but is malformed, `vreflink` exits with a clear
 startup error.
 
-Daemon environment variables:
+`vreflinkd` uses a dedicated TOML config file, not runtime environment
+variables. By default it loads `/etc/vreflinkd/config.toml`, or another path
+passed with `-c`.
 
-`vreflinkd` does not auto-load the XDG guest config file. It still uses the
-daemon environment variables below, typically through systemd.
+Example daemon config file:
 
-- `VREFLINK_SHARE_ROOT` default: `/srv/labshare`
-- `VREFLINK_VSOCK_PORT` default: `19090`
-- `VREFLINK_READ_TIMEOUT` default: `5s`
-- `VREFLINK_WRITE_TIMEOUT` default: `5s`
-- `VREFLINK_ALLOW_V1_FALLBACK` default: `false`
-- `VREFLINK_TOKEN_MAP_PATH` default: `/etc/vreflinkd/tokens.yaml`
+```toml
+version = 1
+share_root = "/srv/labshare"
+port = 19090
+read_timeout = "5s"
+write_timeout = "5s"
+log_level = "info"
+allow_v1_fallback = false
 
-`vreflinkd` validates `VREFLINK_SHARE_ROOT` before it starts listening. Startup
-fails if the path does not exist, is not a directory, is not writable for the
-probe files, or cannot complete a reflink probe.
-
-When the token-map path points to an existing YAML file, `vreflinkd` switches
-to protocol v2 and requires authenticated requests. The guest sends only a
-bearer token; the host maps that token to a configured host identity and runs
-the reflink work under that identity.
-
-Example host token map:
-
-```yaml
-version: 1
-tokens:
-  - name: project-a
-    token: "project-a-token"
-    uid: 1001
-    gid: 1001
-    groups: [44]
+[[tokens]]
+name = "project-a"
+token = "project-a-token"
+uid = 1001
+gid = 1001
+groups = [44]
 ```
 
-Recommended operational permissions for that file are owner `root` and mode
-`0600`. `groups` is the supplementary-group list only and should not repeat the
-primary `gid`. By default, `vreflinkd` now fails startup if the configured
-token-map file is missing. Set `VREFLINK_ALLOW_V1_FALLBACK=true` only if you
-explicitly want to re-enable unauthenticated legacy v1 mode. This token mapping
-is intentionally a trusted-guest design for project VMs, not a per-user
-attestation scheme inside the guest.
+Daemon TOML keys:
+
+- `share_root` default: `/srv/labshare`
+- `port` default: `19090`
+- `read_timeout` default: `5s`
+- `write_timeout` default: `5s`
+- `log_level` default: `info`
+- `allow_v1_fallback` default: `false`
+
+`vreflinkd` validates `share_root` before it starts listening. Startup fails if
+the path does not exist, is not a directory, is not writable for the probe
+files, or cannot complete a reflink probe.
+
+Each `[[tokens]]` entry maps a bearer token to the host identity that will run
+the actual reflink work. `groups` is the supplementary-group list only and
+should not repeat the primary `gid`. The daemon config now contains secret
+material, so recommended permissions are owner `root` and mode `0600`. By
+default, startup fails closed if there are no usable token entries. Set
+`allow_v1_fallback = true` only if you explicitly want unauthenticated legacy
+v1 mode. This token mapping is intentionally a trusted-guest design for project
+VMs, not a per-user attestation scheme inside the guest.
 
 ## Testing
 
@@ -241,11 +256,13 @@ The package installs:
 - `/usr/bin/vreflink`
 - `/usr/bin/vreflinkd`
 - `/lib/systemd/system/vreflinkd.service`
-- `/etc/default/vreflinkd`
+- `/etc/vreflinkd/config.toml`
+- `/usr/share/vreflink/config.toml`
 
-The service is installed but disabled by default. Operators create
-`/etc/vreflinkd/tokens.yaml` separately when enabling protocol v2 token
-authentication. Legacy v1 fallback is disabled by default.
+The service is installed but disabled by default. Operators edit
+`/etc/vreflinkd/config.toml` with the real `share_root` and token mappings
+before enabling protocol v2 token authentication. Legacy v1 fallback is
+disabled by default.
 
 Manual binary install:
 
@@ -258,8 +275,8 @@ sudo ./vreflinkd install
 ```
 
 `vreflink config init` writes the guest config template to
-`$XDG_CONFIG_HOME/vreflink/env` and refuses to overwrite an existing file
-unless `--force` is used.
+`$XDG_CONFIG_HOME/vreflink/config.toml` and refuses to overwrite an existing
+file unless `--force` is used.
 
 `vreflinkd systemd-unit` prints the canonical systemd unit to stdout so it can
 be reviewed or customized before installation.

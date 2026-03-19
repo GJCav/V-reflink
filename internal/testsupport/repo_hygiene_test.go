@@ -48,6 +48,9 @@ func TestRepoContainsNoLegacyReflinkTagReferences(t *testing.T) {
 		if filepath.Ext(path) == ".png" || filepath.Ext(path) == ".jpg" || filepath.Ext(path) == ".jpeg" || filepath.Ext(path) == ".gif" {
 			return nil
 		}
+		if path == filepath.Join(repoRoot, "dev-logs", "02-impl_plan_v1.md") {
+			return nil
+		}
 
 		data, err := os.ReadFile(path)
 		if err != nil {

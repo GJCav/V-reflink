@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -10,18 +11,26 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pelletier/go-toml/v2"
+
+	"github.com/GJCav/V-reflink/internal/auth"
 )
 
 const (
-	defaultMountRoot = "/shared"
-	defaultShareRoot = "/srv/labshare"
-	defaultTokenMap  = "/etc/vreflinkd/tokens.yaml"
-	defaultHostCID   = 2
-	defaultPort      = 19090
-	defaultTimeout   = 5 * time.Second
+	defaultMountRoot        = "/shared"
+	defaultShareRoot        = "/srv/labshare"
+	defaultDaemonConfigPath = "/etc/vreflinkd/config.toml"
+	defaultHostCID          = 2
+	defaultPort             = 19090
+	defaultTimeout          = 5 * time.Second
+	defaultLogLevel         = "info"
 
-	cliConfigDirName  = "vreflink"
-	cliConfigFileName = "env"
+	configVersion1 = 1
+
+	cliConfigDirName        = "vreflink"
+	cliConfigFileName       = "config.toml"
+	cliLegacyConfigFileName = "env"
 )
 
 type CLI struct {
@@ -37,8 +46,29 @@ type Daemon struct {
 	VsockPort       uint32
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
-	TokenMapPath    string
+	LogLevel        string
 	AllowV1Fallback bool
+	Tokens          []auth.Entry
+}
+
+type cliFile struct {
+	Version   int     `toml:"version"`
+	MountRoot string  `toml:"mount_root"`
+	HostCID   *uint32 `toml:"host_cid"`
+	Port      *uint32 `toml:"port"`
+	Timeout   string  `toml:"timeout"`
+	Token     string  `toml:"token"`
+}
+
+type daemonFile struct {
+	Version         int          `toml:"version"`
+	ShareRoot       string       `toml:"share_root"`
+	Port            *uint32      `toml:"port"`
+	ReadTimeout     string       `toml:"read_timeout"`
+	WriteTimeout    string       `toml:"write_timeout"`
+	LogLevel        string       `toml:"log_level"`
+	AllowV1Fallback bool         `toml:"allow_v1_fallback"`
+	Tokens          []auth.Entry `toml:"tokens"`
 }
 
 func LoadCLI() (CLI, error) {
@@ -53,6 +83,22 @@ func CLIConfigPath() (string, error) {
 	return cliConfigPath(os.UserConfigDir)
 }
 
+func LoadDaemon() (Daemon, error) {
+	return loadDaemon(defaultDaemonConfigPath)
+}
+
+func LoadDaemonPath(path string) (Daemon, error) {
+	return loadDaemon(path)
+}
+
+func DefaultDaemonConfigPath() string {
+	return defaultDaemonConfigPath
+}
+
+func DefaultDaemon() Daemon {
+	return defaultDaemonConfig()
+}
+
 func loadCLI(userConfigDir func() (string, error), lookupEnv func(string) (string, bool)) (CLI, error) {
 	cfg := defaultCLIConfig()
 
@@ -61,8 +107,16 @@ func loadCLI(userConfigDir func() (string, error), lookupEnv func(string) (strin
 		return CLI{}, err
 	}
 
-	if err := loadCLIFile(configPath, &cfg); err != nil {
+	if err := loadCLITOMLFile(configPath, &cfg); err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
+			return CLI{}, err
+		}
+
+		legacyPath, legacyErr := cliLegacyConfigPath(userConfigDir)
+		if legacyErr != nil {
+			return CLI{}, legacyErr
+		}
+		if err := loadCLILegacyEnvFile(legacyPath, &cfg); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return CLI{}, err
 		}
 	}
@@ -72,6 +126,19 @@ func loadCLI(userConfigDir func() (string, error), lookupEnv func(string) (strin
 	cfg.VsockPort = uint32LookupEnv(lookupEnv, "VREFLINK_VSOCK_PORT", cfg.VsockPort)
 	cfg.Timeout = durationLookupEnv(lookupEnv, "VREFLINK_CLIENT_TIMEOUT", cfg.Timeout)
 	cfg.AuthToken = stringLookupEnv(lookupEnv, "VREFLINK_AUTH_TOKEN", cfg.AuthToken)
+
+	return cfg, nil
+}
+
+func loadDaemon(path string) (Daemon, error) {
+	if strings.TrimSpace(path) == "" {
+		path = defaultDaemonConfigPath
+	}
+
+	cfg := defaultDaemonConfig()
+	if err := loadDaemonFile(path, &cfg); err != nil {
+		return Daemon{}, err
+	}
 
 	return cfg, nil
 }
@@ -86,14 +153,14 @@ func defaultCLIConfig() CLI {
 	}
 }
 
-func LoadDaemon() Daemon {
+func defaultDaemonConfig() Daemon {
 	return Daemon{
-		ShareRoot:       stringEnv("VREFLINK_SHARE_ROOT", defaultShareRoot),
-		VsockPort:       uint32Env("VREFLINK_VSOCK_PORT", defaultPort),
-		ReadTimeout:     durationEnv("VREFLINK_READ_TIMEOUT", defaultTimeout),
-		WriteTimeout:    durationEnv("VREFLINK_WRITE_TIMEOUT", defaultTimeout),
-		TokenMapPath:    stringEnv("VREFLINK_TOKEN_MAP_PATH", defaultTokenMap),
-		AllowV1Fallback: boolEnv("VREFLINK_ALLOW_V1_FALLBACK", false),
+		ShareRoot:       defaultShareRoot,
+		VsockPort:       defaultPort,
+		ReadTimeout:     defaultTimeout,
+		WriteTimeout:    defaultTimeout,
+		LogLevel:        defaultLogLevel,
+		AllowV1Fallback: false,
 	}
 }
 
@@ -106,7 +173,51 @@ func cliConfigPath(userConfigDir func() (string, error)) (string, error) {
 	return filepath.Join(dir, cliConfigDirName, cliConfigFileName), nil
 }
 
-func loadCLIFile(path string, cfg *CLI) error {
+func cliLegacyConfigPath(userConfigDir func() (string, error)) (string, error) {
+	dir, err := userConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user config directory: %w", err)
+	}
+
+	return filepath.Join(dir, cliConfigDirName, cliLegacyConfigFileName), nil
+}
+
+func loadCLITOMLFile(path string, cfg *CLI) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var file cliFile
+	if err := decodeTOML(path, data, &file); err != nil {
+		return err
+	}
+	if file.Version != configVersion1 {
+		return fmt.Errorf("parse %s: unsupported version: %d", path, file.Version)
+	}
+
+	if strings.TrimSpace(file.MountRoot) != "" {
+		cfg.GuestMountRoot = strings.TrimSpace(file.MountRoot)
+	}
+	if file.HostCID != nil {
+		cfg.HostCID = *file.HostCID
+	}
+	if file.Port != nil {
+		cfg.VsockPort = *file.Port
+	}
+	if strings.TrimSpace(file.Timeout) != "" {
+		parsed, err := time.ParseDuration(strings.TrimSpace(file.Timeout))
+		if err != nil {
+			return fmt.Errorf("parse %s: timeout must be a duration: %w", path, err)
+		}
+		cfg.Timeout = parsed
+	}
+	cfg.AuthToken = file.Token
+
+	return nil
+}
+
+func loadCLILegacyEnvFile(path string, cfg *CLI) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -124,7 +235,7 @@ func loadCLIFile(path string, cfg *CLI) error {
 			continue
 		}
 
-		if err := applyCLIFileEntry(cfg, key, value); err != nil {
+		if err := applyCLILegacyEnvEntry(cfg, key, value); err != nil {
 			return fmt.Errorf("parse %s:%d: %w", path, lineNo, err)
 		}
 	}
@@ -133,6 +244,58 @@ func loadCLIFile(path string, cfg *CLI) error {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 
+	return nil
+}
+
+func loadDaemonFile(path string, cfg *Daemon) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read daemon config %s: %w", path, err)
+	}
+
+	var file daemonFile
+	if err := decodeTOML(path, data, &file); err != nil {
+		return err
+	}
+	if file.Version != configVersion1 {
+		return fmt.Errorf("parse %s: unsupported version: %d", path, file.Version)
+	}
+
+	if strings.TrimSpace(file.ShareRoot) != "" {
+		cfg.ShareRoot = strings.TrimSpace(file.ShareRoot)
+	}
+	if file.Port != nil {
+		cfg.VsockPort = *file.Port
+	}
+	if strings.TrimSpace(file.ReadTimeout) != "" {
+		parsed, err := time.ParseDuration(strings.TrimSpace(file.ReadTimeout))
+		if err != nil {
+			return fmt.Errorf("parse %s: read_timeout must be a duration: %w", path, err)
+		}
+		cfg.ReadTimeout = parsed
+	}
+	if strings.TrimSpace(file.WriteTimeout) != "" {
+		parsed, err := time.ParseDuration(strings.TrimSpace(file.WriteTimeout))
+		if err != nil {
+			return fmt.Errorf("parse %s: write_timeout must be a duration: %w", path, err)
+		}
+		cfg.WriteTimeout = parsed
+	}
+	if strings.TrimSpace(file.LogLevel) != "" {
+		cfg.LogLevel = strings.TrimSpace(file.LogLevel)
+	}
+	cfg.AllowV1Fallback = file.AllowV1Fallback
+	cfg.Tokens = append([]auth.Entry(nil), file.Tokens...)
+
+	return nil
+}
+
+func decodeTOML(path string, data []byte, target any) error {
+	decoder := toml.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
 	return nil
 }
 
@@ -162,7 +325,7 @@ func parseEnvLine(line string) (string, string, bool, error) {
 	return key, strings.TrimSpace(parts[1]), true, nil
 }
 
-func applyCLIFileEntry(cfg *CLI, key, value string) error {
+func applyCLILegacyEnvEntry(cfg *CLI, key, value string) error {
 	switch key {
 	case "VREFLINK_GUEST_MOUNT_ROOT":
 		cfg.GuestMountRoot = value
@@ -189,22 +352,6 @@ func applyCLIFileEntry(cfg *CLI, key, value string) error {
 	}
 
 	return nil
-}
-
-func stringEnv(key, fallback string) string {
-	return stringLookupEnv(os.LookupEnv, key, fallback)
-}
-
-func uint32Env(key string, fallback uint32) uint32 {
-	return uint32LookupEnv(os.LookupEnv, key, fallback)
-}
-
-func durationEnv(key string, fallback time.Duration) time.Duration {
-	return durationLookupEnv(os.LookupEnv, key, fallback)
-}
-
-func boolEnv(key string, fallback bool) bool {
-	return boolLookupEnv(os.LookupEnv, key, fallback)
 }
 
 func stringLookupEnv(lookupEnv func(string) (string, bool), key, fallback string) string {
@@ -237,20 +384,6 @@ func durationLookupEnv(lookupEnv func(string) (string, bool), key string, fallba
 	}
 
 	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return fallback
-	}
-
-	return parsed
-}
-
-func boolLookupEnv(lookupEnv func(string) (string, bool), key string, fallback bool) bool {
-	value, ok := lookupEnv(key)
-	if !ok || value == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}

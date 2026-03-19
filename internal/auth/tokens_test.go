@@ -1,38 +1,33 @@
 package auth
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
-func TestLoadTokenMap(t *testing.T) {
+func TestNewTokenMapFromEntries(t *testing.T) {
 	t.Parallel()
 
-	t.Run("missing file", func(t *testing.T) {
-		tokenMap, err := LoadTokenMap(filepath.Join(t.TempDir(), "missing.yaml"))
+	t.Run("empty entries returns nil", func(t *testing.T) {
+		tokenMap, err := NewTokenMapFromEntries("config.toml", nil)
 		if err != nil {
-			t.Fatalf("LoadTokenMap() error = %v", err)
+			t.Fatalf("NewTokenMapFromEntries() error = %v", err)
 		}
 		if tokenMap != nil {
-			t.Fatalf("LoadTokenMap() = %#v, want nil", tokenMap)
+			t.Fatalf("NewTokenMapFromEntries() = %#v, want nil", tokenMap)
 		}
 	})
 
-	t.Run("valid yaml", func(t *testing.T) {
-		path := writeTokenMap(t, `
-version: 1
-tokens:
-  - name: project-a
-    token: token-a
-    uid: 1001
-    gid: 1002
-    groups: [44, 1002, 44]
-`)
+	t.Run("valid entries", func(t *testing.T) {
+		uid := uint32(1001)
+		gid := uint32(1002)
 
-		tokenMap, err := LoadTokenMap(path)
+		tokenMap, err := NewTokenMapFromEntries("config.toml", []Entry{{
+			Name:   "project-a",
+			Token:  "token-a",
+			UID:    &uid,
+			GID:    &gid,
+			Groups: []uint32{44, 1002, 44},
+		}})
 		if err != nil {
-			t.Fatalf("LoadTokenMap() error = %v", err)
+			t.Fatalf("NewTokenMapFromEntries() error = %v", err)
 		}
 
 		identity, ok := tokenMap.Resolve("token-a")
@@ -54,58 +49,28 @@ tokens:
 	})
 
 	t.Run("duplicate token rejected", func(t *testing.T) {
-		path := writeTokenMap(t, `
-version: 1
-tokens:
-  - token: dup
-    uid: 1001
-    gid: 1001
-  - token: dup
-    uid: 1002
-    gid: 1002
-`)
+		uid1 := uint32(1001)
+		gid1 := uint32(1001)
+		uid2 := uint32(1002)
+		gid2 := uint32(1002)
 
-		if _, err := LoadTokenMap(path); err == nil {
-			t.Fatal("LoadTokenMap() unexpectedly succeeded")
-		}
-	})
-
-	t.Run("unknown field rejected", func(t *testing.T) {
-		path := writeTokenMap(t, `
-version: 1
-tokens:
-  - token: token-a
-    uid: 1001
-    gid: 1002
-    extra: nope
-`)
-
-		if _, err := LoadTokenMap(path); err == nil {
-			t.Fatal("LoadTokenMap() unexpectedly succeeded")
+		_, err := NewTokenMapFromEntries("config.toml", []Entry{
+			{Token: "dup", UID: &uid1, GID: &gid1},
+			{Token: "dup", UID: &uid2, GID: &gid2},
+		})
+		if err == nil {
+			t.Fatal("NewTokenMapFromEntries() unexpectedly succeeded")
 		}
 	})
 
 	t.Run("missing identity rejected", func(t *testing.T) {
-		path := writeTokenMap(t, `
-version: 1
-tokens:
-  - token: only-token
-    gid: 1001
-`)
-
-		if _, err := LoadTokenMap(path); err == nil {
-			t.Fatal("LoadTokenMap() unexpectedly succeeded")
+		gid := uint32(1001)
+		_, err := NewTokenMapFromEntries("config.toml", []Entry{{
+			Token: "only-token",
+			GID:   &gid,
+		}})
+		if err == nil {
+			t.Fatal("NewTokenMapFromEntries() unexpectedly succeeded")
 		}
 	})
-}
-
-func writeTokenMap(t *testing.T, contents string) string {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "tokens.yaml")
-	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-
-	return path
 }

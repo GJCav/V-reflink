@@ -23,12 +23,14 @@ It installs:
 - `/usr/bin/vreflink`
 - `/usr/bin/vreflinkd`
 - `/lib/systemd/system/vreflinkd.service`
-- `/etc/default/vreflinkd`
+- `/etc/vreflinkd/config.toml`
+- `/usr/share/vreflink/config.toml`
 
-The package does not enable or start `vreflinkd` automatically. It also does
-not ship `/etc/vreflinkd/tokens.yaml`; operators create that YAML token map
-separately when enabling protocol v2 authentication. Legacy v1 fallback is
-disabled by default unless `VREFLINK_ALLOW_V1_FALLBACK=true` is set.
+The package does not enable or start `vreflinkd` automatically. Operators edit
+`/etc/vreflinkd/config.toml` to set the real `share_root`, token mappings, and
+any optional `allow_v1_fallback = true` override before enabling the service.
+Because that file contains bearer tokens, it should stay root-owned and mode
+`0600`.
 
 The tarball contains the same binaries plus the packaged templates so users on
 other Linux distributions can copy the files into place manually.

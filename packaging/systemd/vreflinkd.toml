@@ -1,0 +1,14 @@
+version = 1
+share_root = "/srv/labshare"
+port = 19090
+read_timeout = "5s"
+write_timeout = "5s"
+log_level = "info"
+allow_v1_fallback = false
+
+[[tokens]]
+name = "project-a"
+token = "replace-me"
+uid = 1000
+gid = 1000
+groups = []

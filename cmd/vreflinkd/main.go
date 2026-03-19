@@ -24,7 +24,6 @@ import (
 
 var (
 	validateShareRoot     = service.ValidateShareRoot
-	loadDaemonTokenMap    = auth.LoadTokenMap
 	resolveExecutablePath = os.Executable
 	listenVsock           = func(port uint32) (net.Listener, error) {
 		return vsock.Listen(port, nil)
@@ -39,8 +38,7 @@ func main() {
 }
 
 func newRootCmd() *cobra.Command {
-	cfg := config.LoadDaemon()
-	logLevel := "info"
+	configPath := config.DefaultDaemonConfigPath()
 
 	cmd := &cobra.Command{
 		Use:           "vreflinkd",
@@ -51,16 +49,16 @@ func newRootCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			return runDaemon(ctx, cfg, logLevel)
+			cfg, err := config.LoadDaemonPath(configPath)
+			if err != nil {
+				return err
+			}
+
+			return runDaemon(ctx, cfg)
 		},
 	}
 
-	cmd.Flags().StringVar(&cfg.ShareRoot, "share-root", cfg.ShareRoot, "host share root")
-	cmd.Flags().Uint32Var(&cfg.VsockPort, "port", cfg.VsockPort, "vsock port")
-	cmd.Flags().DurationVar(&cfg.ReadTimeout, "read-timeout", cfg.ReadTimeout, "connection read timeout")
-	cmd.Flags().DurationVar(&cfg.WriteTimeout, "write-timeout", cfg.WriteTimeout, "connection write timeout")
-	cmd.Flags().StringVar(&cfg.TokenMapPath, "token-map-path", cfg.TokenMapPath, "path to the YAML token map")
-	cmd.Flags().StringVar(&logLevel, "log-level", logLevel, "log level (debug, info, warn, error)")
+	cmd.Flags().StringVarP(&configPath, "config", "c", configPath, "path to the daemon TOML config file")
 
 	cmd.AddCommand(newInstallCmd())
 	cmd.AddCommand(newSystemdUnitCmd())
@@ -69,8 +67,8 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
-func runDaemon(ctx context.Context, cfg config.Daemon, logLevel string) error {
-	logger := logutil.NewLogger(logutil.ParseLevel(logLevel))
+func runDaemon(ctx context.Context, cfg config.Daemon) error {
+	logger := logutil.NewLogger(logutil.ParseLevel(cfg.LogLevel))
 
 	if err := validateShareRoot(cfg.ShareRoot, service.FileReflinker{}); err != nil {
 		return err
@@ -81,7 +79,7 @@ func runDaemon(ctx context.Context, cfg config.Daemon, logLevel string) error {
 		return err
 	}
 	if tokenMap == nil {
-		logger.Warn("starting without token authentication because VREFLINK_ALLOW_V1_FALLBACK=true")
+		logger.Warn("starting without token authentication because allow_v1_fallback=true")
 	}
 
 	executor, err := newDaemonExecutor(cfg, tokenMap)
@@ -130,7 +128,7 @@ func runDaemon(ctx context.Context, cfg config.Daemon, logLevel string) error {
 }
 
 func loadRuntimeTokenMap(cfg config.Daemon) (*auth.TokenMap, error) {
-	tokenMap, err := loadDaemonTokenMap(cfg.TokenMapPath)
+	tokenMap, err := auth.NewTokenMapFromEntries("daemon config", cfg.Tokens)
 	if err != nil {
 		return nil, err
 	}
@@ -142,11 +140,7 @@ func loadRuntimeTokenMap(cfg config.Daemon) (*auth.TokenMap, error) {
 		return nil, nil
 	}
 
-	if cfg.TokenMapPath == "" {
-		return nil, fmt.Errorf("token map path is required unless VREFLINK_ALLOW_V1_FALLBACK=true")
-	}
-
-	return nil, fmt.Errorf("token map %q is required unless VREFLINK_ALLOW_V1_FALLBACK=true", cfg.TokenMapPath)
+	return nil, fmt.Errorf("token configuration is required unless allow_v1_fallback=true")
 }
 
 func newDaemonExecutor(cfg config.Daemon, tokenMap *auth.TokenMap) (daemonExecutor, error) {
@@ -197,7 +191,7 @@ func newWorkerCmd() *cobra.Command {
 func newInstallCmd() *cobra.Command {
 	binDir := "/usr/bin"
 	systemdDir := "/etc/systemd/system"
-	defaultsPath := "/etc/default/vreflinkd"
+	configPath := config.DefaultDaemonConfigPath()
 
 	cmd := &cobra.Command{
 		Use:           "install",
@@ -215,9 +209,9 @@ func newInstallCmd() *cobra.Command {
 				executablePath,
 				binDir,
 				systemdDir,
-				defaultsPath,
+				configPath,
 				pkgassets.SystemdUnitTemplate(),
-				pkgassets.DaemonDefaultsTemplate(),
+				pkgassets.DaemonConfigTemplate(),
 			)
 			if err != nil {
 				return err
@@ -225,7 +219,7 @@ func newInstallCmd() *cobra.Command {
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed host binary to %s\n", result.BinaryPath)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed systemd unit to %s\n", result.SystemdPath)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed defaults file to %s\n", result.DefaultsPath)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "installed config file to %s\n", result.ConfigPath)
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "next steps:")
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  sudo systemctl daemon-reload")
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  sudo systemctl enable --now vreflinkd")
@@ -235,7 +229,7 @@ func newInstallCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&binDir, "bin-dir", binDir, "directory to install vreflinkd into")
 	cmd.Flags().StringVar(&systemdDir, "systemd-dir", systemdDir, "directory to install the systemd unit into")
-	cmd.Flags().StringVar(&defaultsPath, "defaults-path", defaultsPath, "path to install the defaults file into")
+	cmd.Flags().StringVar(&configPath, "config-path", configPath, "path to install the daemon TOML config into")
 	return cmd
 }
 

@@ -62,7 +62,7 @@ func TestReleaseArtifacts(t *testing.T) {
 		"./usr/bin/vreflink",
 		"./usr/bin/vreflinkd",
 		"./lib/systemd/system/vreflinkd.service",
-		"./etc/default/vreflinkd",
+		"./etc/vreflinkd/config.toml",
 	} {
 		if !strings.Contains(result.Stdout, want) {
 			t.Fatalf("dpkg-deb -c output missing %q", want)
@@ -78,8 +78,8 @@ func TestReleaseArtifacts(t *testing.T) {
 		rootPrefix + "usr/bin/vreflink",
 		rootPrefix + "usr/bin/vreflinkd",
 		rootPrefix + "lib/systemd/system/vreflinkd.service",
-		rootPrefix + "etc/default/vreflinkd",
-		rootPrefix + "share/vreflink/vreflink.env",
+		rootPrefix + "etc/vreflinkd/config.toml",
+		rootPrefix + "share/vreflink/config.toml",
 	} {
 		if !contains(entries, want) {
 			t.Fatalf("tarball missing %q", want)
@@ -130,7 +130,7 @@ func TestReleaseArtifacts(t *testing.T) {
 	}
 	for _, path := range []string{
 		filepath.Join(rootDir, "lib", "systemd", "system", "vreflinkd.service"),
-		filepath.Join(rootDir, "etc", "default", "vreflinkd"),
+		filepath.Join(rootDir, "etc", "vreflinkd", "config.toml"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("os.Stat(%s) error = %v", path, err)

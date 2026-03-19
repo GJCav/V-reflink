@@ -1,12 +1,8 @@
 package auth
 
 import (
-	"bytes"
 	"fmt"
-	"os"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 const TokenMapVersion1 = 1
@@ -18,65 +14,44 @@ type Identity struct {
 	Groups []uint32
 }
 
+type Entry struct {
+	Name   string   `toml:"name"`
+	Token  string   `toml:"token"`
+	UID    *uint32  `toml:"uid"`
+	GID    *uint32  `toml:"gid"`
+	Groups []uint32 `toml:"groups"`
+}
+
 type TokenMap struct {
 	identities map[string]Identity
 }
 
-type tokenMapFile struct {
-	Version int             `yaml:"version"`
-	Tokens  []tokenMapEntry `yaml:"tokens"`
-}
-
-type tokenMapEntry struct {
-	Name   string   `yaml:"name"`
-	Token  string   `yaml:"token"`
-	UID    *uint32  `yaml:"uid"`
-	GID    *uint32  `yaml:"gid"`
-	Groups []uint32 `yaml:"groups"`
-}
-
-func LoadTokenMap(path string) (*TokenMap, error) {
-	if path == "" {
+func NewTokenMapFromEntries(source string, entries []Entry) (*TokenMap, error) {
+	if len(entries) == 0 {
 		return nil, nil
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("read token map %s: %w", path, err)
-	}
-
-	var file tokenMapFile
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&file); err != nil {
-		return nil, fmt.Errorf("parse token map %s: %w", path, err)
-	}
-
-	if file.Version != TokenMapVersion1 {
-		return nil, fmt.Errorf("parse token map %s: unsupported version: %d", path, file.Version)
+	if strings.TrimSpace(source) == "" {
+		source = "token map"
 	}
 
 	tokenMap := &TokenMap{
-		identities: make(map[string]Identity, len(file.Tokens)),
+		identities: make(map[string]Identity, len(entries)),
 	}
 
-	for index, entry := range file.Tokens {
+	for index, entry := range entries {
 		token := strings.TrimSpace(entry.Token)
 		if token == "" {
-			return nil, fmt.Errorf("parse token map %s: tokens[%d].token is required", path, index)
+			return nil, fmt.Errorf("parse %s: tokens[%d].token is required", source, index)
 		}
 		if entry.UID == nil {
-			return nil, fmt.Errorf("parse token map %s: tokens[%d].uid is required", path, index)
+			return nil, fmt.Errorf("parse %s: tokens[%d].uid is required", source, index)
 		}
 		if entry.GID == nil {
-			return nil, fmt.Errorf("parse token map %s: tokens[%d].gid is required", path, index)
+			return nil, fmt.Errorf("parse %s: tokens[%d].gid is required", source, index)
 		}
 		if _, exists := tokenMap.identities[token]; exists {
-			return nil, fmt.Errorf("parse token map %s: duplicate token at tokens[%d]", path, index)
+			return nil, fmt.Errorf("parse %s: duplicate token at tokens[%d]", source, index)
 		}
 
 		tokenMap.identities[token] = Identity{

@@ -78,7 +78,7 @@ func TestConfigInitWritesTemplate(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	path := filepath.Join(configHome, "vreflink", "env")
+	path := filepath.Join(configHome, "vreflink", "config.toml")
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("os.ReadFile() error = %v", err)
@@ -93,7 +93,7 @@ func TestConfigInitRefusesOverwriteWithoutForce(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 
-	path := filepath.Join(configHome, "vreflink", "env")
+	path := filepath.Join(configHome, "vreflink", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
@@ -113,7 +113,7 @@ func TestConfigInitForceOverwritesMalformedConfig(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 
-	path := filepath.Join(configHome, "vreflink", "env")
+	path := filepath.Join(configHome, "vreflink", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
